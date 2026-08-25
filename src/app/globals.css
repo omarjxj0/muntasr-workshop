@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+@theme {
+  --font-cairo: 'Cairo', sans-serif;
+  --color-brand: #3b82f6;
+  --color-brand-dark: #2563eb;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --sidebar-width: 260px;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-cairo), system-ui, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}
+
+/* Glassmorphism card */
+.glass-card {
+  background: rgba(30, 41, 59, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(51, 65, 85, 0.8);
+  border-radius: 16px;
+}
+
+/* Glowing input focus */
+.input-glow:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+/* Animated gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Sidebar active link */
+.sidebar-link-active {
+  background: linear-gradient(90deg, rgba(59,130,246,0.2), transparent);
+  border-right: 3px solid #3b82f6;
+  color: #60a5fa;
+}
+
+/* Status badge pulse */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.7; }
+}
+.pulse-soft {
+  animation: pulse-soft 2s ease-in-out infinite;
+}
