@@ -41,16 +41,16 @@ function NewVisitPageInner() {
   return (
     <div className="p-6 md:p-10 max-w-xl mx-auto">
       <div className="glass-card p-8 space-y-6">
-        <h1 className="text-2xl font-bold text-slate-100">فتح زيارة جديدة</h1>
+        <h1 className="text-2xl font-bold text-slate-800">فتح زيارة جديدة</h1>
         <form onSubmit={handleCreate} className="space-y-4">
           <div>
-            <label className="block text-sm text-slate-400 mb-2">وصف المشكلة / الشكوى</label>
+            <label className="block text-sm text-slate-600 mb-2 font-medium">وصف المشكلة / الشكوى</label>
             <textarea value={complaint} onChange={e => setComplaint(e.target.value)}
               rows={4} placeholder="اكتب وصف المشكلة..."
-              className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 input-glow resize-none" />
+              className="w-full px-4 py-3 rounded-xl bg-slate-50 text-slate-800 border border-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 resize-none transition-all focus:outline-none" />
           </div>
           <button type="submit" disabled={loading}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-600/30 disabled:opacity-60">
+            className="w-full py-3 btn-gradient text-white rounded-xl font-bold transition-all disabled:opacity-60">
             {loading ? 'جارٍ الإنشاء...' : 'فتح الزيارة'}
           </button>
         </form>

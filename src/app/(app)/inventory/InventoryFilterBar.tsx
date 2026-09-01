@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 
 interface FilterBarProps {
   companies: { id: string; name: string }[]
@@ -24,24 +24,28 @@ export default function InventoryFilterBar({
     router.push(`/inventory?${params.toString()}`)
   }
 
+  const inputClass = "px-4 py-2.5 rounded-2xl text-sm transition-all border-2 border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
+
   return (
     <div className="flex flex-wrap gap-3">
-      <form onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); update('q', fd.get('q') as string) }}
-        className="flex-1 min-w-48">
+      <form
+        onSubmit={e => { e.preventDefault(); const fd = new FormData(e.currentTarget); update('q', fd.get('q') as string) }}
+        className="flex-1 min-w-48"
+      >
         <div className="relative">
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">🔍</span>
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">🔍</span>
           <input
             name="q"
             defaultValue={currentQ}
             placeholder="بحث بالاسم أو الرمز..."
-            className="w-full pr-9 pl-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm input-glow"
+            className={`w-full pr-9 pl-4 ${inputClass}`}
           />
         </div>
       </form>
       <select
         value={currentCompany ?? ''}
         onChange={e => update('company', e.target.value)}
-        className="px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-sm input-glow"
+        className={inputClass}
       >
         <option value="">كل الشركات</option>
         {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -49,7 +53,7 @@ export default function InventoryFilterBar({
       <select
         value={currentCategory ?? ''}
         onChange={e => update('category', e.target.value)}
-        className="px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-sm input-glow"
+        className={inputClass}
       >
         <option value="">كل الأنواع</option>
         {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}

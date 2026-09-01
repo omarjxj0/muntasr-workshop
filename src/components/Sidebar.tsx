@@ -5,7 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, Car, Package, Users, Wallet, Settings,
-  LogOut, Menu, X, Zap, DollarSign, CalendarDays,
+  LogOut, Menu, X, Zap, CalendarDays, UserCheck, ImageOff, MessageSquare, TrendingUp
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/lib/types'
@@ -14,6 +14,9 @@ import toast from 'react-hot-toast'
 
 interface SidebarProps {
   role: UserRole
+  appName?: string
+  appSubtitle?: string
+  logoUrl?: string
 }
 
 interface NavItem {
@@ -24,20 +27,27 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { href: '/',              label: 'لوحة التحكم',   icon: <LayoutDashboard size={20} /> },
-  { href: '/visits',        label: 'الزيارات',       icon: <Car size={20} /> },
-  { href: '/inventory',     label: 'المخزون (ECU)',  icon: <Package size={20} /> },
-  { href: '/employees',     label: 'الموظفون',       icon: <Users size={20} />,       adminOnly: true },
-  { href: '/employees/wages', label: 'الرواتب اليومية', icon: <CalendarDays size={20} />, adminOnly: true },
-  { href: '/finances',      label: 'الصندوق',        icon: <Wallet size={20} />,      adminOnly: true },
-  { href: '/settings',      label: 'الإعدادات',      icon: <Settings size={20} />,    adminOnly: true },
+  { href: '/',                  label: 'لوحة التحكم',      icon: <LayoutDashboard size={20} /> },
+  { href: '/customers',         label: 'الزبائن',           icon: <UserCheck size={20} /> },
+  { href: '/visits',            label: 'الزيارات',          icon: <Car size={20} /> },
+  { href: '/inventory',         label: 'المخزون (ECU)',     icon: <Package size={20} /> },
+  { href: '/marketing',         label: 'التسويق الإلكتروني', icon: <MessageSquare size={20} />, adminOnly: true },
+  { href: '/employees',         label: 'الموظفون',          icon: <Users size={20} />,       adminOnly: true },
+  { href: '/employees/wages',   label: 'الرواتب اليومية',  icon: <CalendarDays size={20} />, adminOnly: true },
+  { href: '/finances',          label: 'الصندوق',           icon: <Wallet size={20} />,      adminOnly: true },
+  { href: '/expenses',          label: 'المصروفات',         icon: <TrendingUp size={20} className="rotate-180" />, adminOnly: true },
+  { href: '/settings',          label: 'الإعدادات',         icon: <Settings size={20} />,    adminOnly: true },
 ]
 
-export default function Sidebar({ role }: SidebarProps) {
+export default function Sidebar({ role, appName, appSubtitle, logoUrl }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [imgError, setImgError] = useState(false)
   const supabase = createClient()
+
+  const displayName     = appName     || 'ورشة منتصر'
+  const displaySubtitle = appSubtitle || 'كهرباء السيارات'
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -47,35 +57,49 @@ export default function Sidebar({ role }: SidebarProps) {
 
   const visibleItems = navItems.filter(item => !item.adminOnly || role === 'admin')
 
-  const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      {/* Logo */}
-      <div className="p-6 border-b border-slate-800">
+  const SidebarContent = ({ onClose }: { onClose?: () => void }) => (
+    <div className="flex flex-col h-full py-5 px-3">
+      {/* Logo / Branding */}
+      <div className="px-3 mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/30">
-            <Zap size={20} className="text-white" />
-          </div>
+          {logoUrl && !imgError ? (
+            <div className="w-11 h-11 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 bg-white/20">
+              <img
+                src={logoUrl}
+                alt={displayName}
+                className="w-full h-full"
+                style={{ objectFit: 'contain' }}
+                onError={() => setImgError(true)}
+              />
+            </div>
+          ) : (
+            <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center shadow-lg shadow-black/10">
+              <Zap size={22} className="text-white" />
+            </div>
+          )}
           <div>
-            <h1 className="font-bold text-lg leading-tight text-slate-100">ورشة منتصر</h1>
-            <p className="text-xs text-slate-400">كهرباء السيارات</p>
+            <h1 className="font-bold text-base leading-tight text-white">
+              {displayName}
+            </h1>
+            <p className="text-xs text-white/60">{displaySubtitle}</p>
           </div>
         </div>
       </div>
 
       {/* Role badge */}
-      <div className="px-4 py-3">
+      <div className="px-3 mb-4">
         <span className={cn(
-          'text-xs px-3 py-1 rounded-full font-medium',
+          'inline-flex items-center text-xs px-3 py-1 rounded-full font-semibold',
           role === 'admin'
-            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-            : 'bg-slate-700/50 text-slate-300 border border-slate-600'
+            ? 'bg-white/20 text-white'
+            : 'bg-white/10 text-white/70'
         )}>
           {role === 'admin' ? '👑 مدير' : '🔧 فني'}
         </span>
       </div>
 
       {/* Nav links */}
-      <nav className="flex-1 overflow-y-auto px-3 py-2 space-y-1">
+      <nav className="flex-1 overflow-y-auto space-y-1">
         {visibleItems.map(item => {
           const isActive = pathname === item.href ||
             (item.href !== '/' && pathname.startsWith(item.href))
@@ -83,12 +107,12 @@ export default function Sidebar({ role }: SidebarProps) {
             <Link
               key={item.href}
               href={item.href}
-              onClick={() => setMobileOpen(false)}
+              onClick={() => onClose?.()}
               className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-200',
+                'flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-200',
                 isActive
                   ? 'sidebar-link-active'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  : 'text-white/70 hover:text-white hover:bg-white/10'
               )}
             >
               {item.icon}
@@ -99,10 +123,10 @@ export default function Sidebar({ role }: SidebarProps) {
       </nav>
 
       {/* Logout */}
-      <div className="p-4 border-t border-slate-800">
+      <div className="pt-4 mt-2 border-t border-white/15">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-sm font-medium text-rose-400 hover:bg-rose-500/10 transition-all duration-200"
+          className="flex items-center gap-3 w-full px-4 py-3 rounded-2xl text-sm font-medium text-white/60 hover:text-white hover:bg-white/10 transition-all duration-200"
         >
           <LogOut size={20} />
           تسجيل الخروج
@@ -113,16 +137,27 @@ export default function Sidebar({ role }: SidebarProps) {
 
   return (
     <>
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex flex-col w-64 shrink-0 h-screen bg-slate-900/80 border-l border-slate-800 sticky top-0">
+      {/* Desktop Sidebar — fixed floating pill on the RIGHT (RTL) */}
+      <aside
+        className="hidden md:flex flex-col fixed right-4 top-4 bottom-4 w-60 shrink-0 z-30 overflow-hidden"
+        style={{
+          background: 'linear-gradient(175deg, #7c3aed 0%, #6d28d9 60%, #5b21b6 100%)',
+          borderRadius: '28px',
+          boxShadow: '0 20px 60px rgba(109,40,217,0.4), 0 4px 16px rgba(109,40,217,0.25)',
+        }}
+      >
         <SidebarContent />
       </aside>
 
-      {/* Mobile toggle */}
+      {/* Mobile toggle button */}
       <div className="md:hidden fixed top-4 right-4 z-50">
         <button
           onClick={() => setMobileOpen(!mobileOpen)}
-          className="p-2 rounded-xl bg-slate-800 border border-slate-700 text-slate-300"
+          className="p-2.5 rounded-2xl shadow-lg text-white"
+          style={{
+            background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+            boxShadow: '0 4px 15px rgba(109,40,217,0.4)',
+          }}
         >
           {mobileOpen ? <X size={22} /> : <Menu size={22} />}
         </button>
@@ -130,10 +165,17 @@ export default function Sidebar({ role }: SidebarProps) {
 
       {/* Mobile drawer */}
       {mobileOpen && (
-        <div className="md:hidden fixed inset-0 z-40 flex">
-          <div className="fixed inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
-          <aside className="relative flex flex-col w-72 h-full bg-slate-900 border-l border-slate-800 z-50">
-            <SidebarContent />
+        <div className="md:hidden fixed inset-0 z-40 flex justify-end">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+          <aside
+            className="relative flex flex-col w-64 h-screen z-50 m-3"
+            style={{
+              background: 'linear-gradient(175deg, #7c3aed 0%, #6d28d9 60%, #5b21b6 100%)',
+              borderRadius: '24px',
+              boxShadow: '0 20px 60px rgba(109,40,217,0.4)',
+            }}
+          >
+            <SidebarContent onClose={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}

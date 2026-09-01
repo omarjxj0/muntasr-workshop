@@ -18,9 +18,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const role = profile?.role ?? 'technician'
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-[#f0f2f7]">
       <Sidebar role={role} />
-      <main className="flex-1 overflow-auto">
+      {/* md:pr-[280px] gives the content breathing room from the fixed right sidebar (width 240px + margin) */}
+      <main className="flex-1 overflow-auto md:pr-[280px] w-full">
         {children}
       </main>
     </div>

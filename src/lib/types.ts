@@ -56,6 +56,7 @@ export interface Ecu {
   barcode: string | null
   symbols_codes: string | null
   stock_quantity: number
+  min_quantity?: number
   purchase_price: number
   selling_price: number
 }

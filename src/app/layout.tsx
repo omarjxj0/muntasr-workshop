@@ -21,19 +21,21 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ar" dir="rtl" className={cairo.variable}>
-      <body className="bg-slate-950 text-slate-100 font-cairo antialiased">
+      <body className="bg-[#f0f2f7] text-slate-800 font-cairo antialiased">
         {children}
         <Toaster
           position="top-center"
           toastOptions={{
             style: {
-              background: '#1e293b',
-              color: '#f1f5f9',
-              border: '1px solid #334155',
+              background: '#ffffff',
+              color: '#1e1b4b',
+              border: '1px solid #e2e4ef',
               fontFamily: 'var(--font-cairo)',
               direction: 'rtl',
+              borderRadius: '14px',
+              boxShadow: '0 8px 30px rgba(120,100,200,0.15)',
             },
-            success: { iconTheme: { primary: '#10b981', secondary: '#fff' } },
+            success: { iconTheme: { primary: '#7c3aed', secondary: '#fff' } },
             error:   { iconTheme: { primary: '#f43f5e', secondary: '#fff' } },
           }}
         />

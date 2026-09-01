@@ -44,7 +44,8 @@ export default function CreateVisitButton() {
   if (!open) {
     return (
       <button onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold transition-all shadow-lg shadow-blue-600/30">
+        className="flex items-center gap-2 px-5 py-2.5 text-white rounded-xl font-semibold transition-all shadow-lg"
+        style={{ background: 'linear-gradient(135deg, #7c3aed, #ec4899)', boxShadow: '0 4px 15px rgba(124,58,237,0.35)' }}>
         <Plus size={18} />
         زيارة جديدة
       </button>
@@ -53,29 +54,43 @@ export default function CreateVisitButton() {
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setOpen(false)}>
-      <div className="glass-card p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
-        <h3 className="font-bold text-lg text-slate-100">فتح زيارة جديدة</h3>
+      <div className="soft-card bg-white p-6 w-full max-w-md space-y-4" onClick={e => e.stopPropagation()}>
+        <h3 className="font-bold text-lg text-slate-800">فتح زيارة جديدة</h3>
         <div className="flex gap-2">
           <input value={phone} onChange={e => setPhone(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
             placeholder="رقم هاتف العميل"
-            className="flex-1 px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 input-glow" />
+            className="flex-1 px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]" />
           <button onClick={handleSearch} disabled={loading}
-            className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl transition-all">
+            className="px-4 py-2.5 text-white rounded-xl transition-all disabled:opacity-60"
+            style={{ background: 'linear-gradient(135deg, #7c3aed, #ec4899)' }}>
             <Search size={18} />
           </button>
         </div>
         {searched && vehicles.length === 0 && (
-          <p className="text-slate-400 text-sm text-center">لم يتم العثور على مركبات، سجّل العميل أولاً من لوحة التحكم</p>
+          <div className="text-center space-y-3 py-2 bg-slate-50 rounded-2xl p-4 border border-slate-100">
+            <p className="text-slate-600 text-sm">لم يتم العثور على زبون أو مركبات مسجلة بالرقم <span className="font-mono font-bold text-slate-800">{phone}</span></p>
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                router.push(`/customers/new?phone=${encodeURIComponent(phone.trim())}`)
+              }}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-bold text-white transition-all shadow-md"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #ec4899)' }}
+            >
+              ➕ تسجيل كزبون جديد
+            </button>
+          </div>
         )}
         {vehicles.map((v: any) => (
           <button key={v.id} onClick={() => handleCreate(v.id)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl transition-all text-right">
-            <span className="text-slate-200 font-medium">{v.make_and_model}</span>
-            <span className="text-slate-400 font-mono text-sm">{v.license_plate}</span>
+            className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl transition-all text-right">
+            <span className="text-slate-700 font-semibold">{v.make_and_model}</span>
+            <span className="text-slate-500 font-mono text-sm">{v.license_plate}</span>
           </button>
         ))}
-        <button onClick={() => setOpen(false)} className="w-full py-2 text-slate-500 text-sm hover:text-slate-300 transition-colors">إلغاء</button>
+        <button onClick={() => setOpen(false)} className="w-full py-2 text-slate-500 font-semibold text-sm hover:text-slate-700 transition-colors">إلغاء</button>
       </div>
     </div>
   )

@@ -8,11 +8,27 @@ export function cn(...inputs: ClassValue[]) {
 
 // Format currency in Iraqi Dinar (IQD)
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('ar-IQ', {
+  return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'IQD',
     maximumFractionDigits: 0,
   }).format(amount)
+}
+
+// Replaces Eastern Arabic numerals (٠-٩) with standard digits (0-9)
+export function parseArabicNumerals(val: string | number): string {
+  if (val == null) return ''
+  return val.toString().replace(/[٠-٩]/g, (d: string) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
+}
+
+// Global handler for financial inputs
+export function handleFinancialBlur(val: string | number): number {
+  const numeric = parseFloat(parseArabicNumerals(val));
+  if (isNaN(numeric)) return 0;
+  if (numeric > 0 && numeric < 10000) {
+    return numeric * 1000;
+  }
+  return numeric;
 }
 
 // Format a date/timestamp to readable Arabic locale

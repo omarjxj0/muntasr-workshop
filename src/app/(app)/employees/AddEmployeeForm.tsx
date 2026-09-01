@@ -29,10 +29,18 @@ export default function AddEmployeeForm() {
     setLoading(false)
   }
 
+  const inputClass = "w-full px-3 py-2.5 rounded-2xl text-sm transition-all border-2 border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
+
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-5 py-3 bg-amber-600/20 hover:bg-amber-600/30 border border-amber-600/30 text-amber-400 rounded-xl font-semibold transition-all w-full justify-center">
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 px-5 py-3 rounded-2xl font-semibold transition-all w-full justify-center text-white"
+        style={{
+          background: 'linear-gradient(135deg, #f59e0b, #d97706)',
+          boxShadow: '0 4px 15px rgba(245,158,11,0.35)',
+        }}
+      >
         <Plus size={18} />
         إضافة موظف جديد
       </button>
@@ -40,33 +48,34 @@ export default function AddEmployeeForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="glass-card p-6 space-y-4 border border-amber-500/20">
-      <h3 className="font-bold text-slate-200">إضافة موظف جديد</h3>
+    <form onSubmit={handleSubmit} className="soft-card p-6 space-y-4 border-2 border-amber-100">
+      <h3 className="font-bold text-slate-700">إضافة موظف جديد</h3>
       <div className="grid grid-cols-3 gap-4">
         <div>
-          <label className="text-xs text-slate-400 mb-1 block">الاسم *</label>
+          <label className="text-xs text-slate-500 mb-1 block font-medium">الاسم *</label>
           <input required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}
-            className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm input-glow" />
+            className={inputClass} />
         </div>
         <div>
-          <label className="text-xs text-slate-400 mb-1 block">رقم الهاتف</label>
+          <label className="text-xs text-slate-500 mb-1 block font-medium">رقم الهاتف</label>
           <input value={form.phone} onChange={e => setForm(p => ({ ...p, phone: e.target.value }))}
-            className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm input-glow font-mono" />
+            className={`${inputClass} font-mono`} />
         </div>
         <div>
-          <label className="text-xs text-slate-400 mb-1 block">التخصص</label>
+          <label className="text-xs text-slate-500 mb-1 block font-medium">التخصص</label>
           <input value={form.specialization} onChange={e => setForm(p => ({ ...p, specialization: e.target.value }))}
             placeholder="مثال: كهربائي محركات"
-            className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm input-glow" />
+            className={inputClass} />
         </div>
       </div>
       <div className="flex gap-3 justify-end">
         <button type="button" onClick={() => setOpen(false)}
-          className="px-4 py-2 rounded-xl border border-slate-700 text-slate-400 text-sm hover:text-slate-200 transition-colors">
+          className="px-4 py-2 rounded-2xl border-2 border-slate-200 text-slate-500 text-sm hover:bg-slate-50 transition-colors font-semibold">
           إلغاء
         </button>
         <button type="submit" disabled={loading}
-          className="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-sm font-semibold transition-all disabled:opacity-60">
+          className="px-5 py-2 rounded-2xl text-sm font-bold text-white transition-all disabled:opacity-60"
+          style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', boxShadow: '0 4px 12px rgba(245,158,11,0.3)' }}>
           {loading ? 'جارٍ الحفظ...' : 'إضافة'}
         </button>
       </div>

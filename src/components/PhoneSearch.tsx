@@ -16,9 +16,6 @@ export default function PhoneSearch() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<SearchResult | null>(null)
   const [notFound, setNotFound] = useState(false)
-  const [showRegisterForm, setShowRegisterForm] = useState(false)
-  const [newCustomer, setNewCustomer] = useState({ name: '', phone: '' })
-  const [newVehicle, setNewVehicle] = useState({ license_plate: '', make_and_model: '', chassis_number_vin: '' })
   const inputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
   const supabase = createClient()
@@ -31,7 +28,6 @@ export default function PhoneSearch() {
     setLoading(true)
     setResult(null)
     setNotFound(false)
-    setShowRegisterForm(false)
 
     const { data: customer } = await supabase
       .from('customers')
@@ -41,7 +37,6 @@ export default function PhoneSearch() {
 
     if (!customer) {
       setNotFound(true)
-      setNewCustomer(prev => ({ ...prev, phone: query.trim() }))
       setLoading(false)
       return
     }
@@ -69,38 +64,15 @@ export default function PhoneSearch() {
     router.push(`/visits/${visit.id}`)
   }
 
-  const handleRegisterCustomer = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newCustomer.name || !newCustomer.phone) return
 
-    const custResult = await supabase
-      .from('customers')
-      .insert({ name: newCustomer.name, phone: newCustomer.phone } as any)
-      .select()
-      .single()
-    const customer = custResult.data as Customer | null
-    const custError = custResult.error
 
-    if (custError || !customer) { toast.error('فشل في تسجيل العميل'); return }
-
-    if (newVehicle.license_plate && newVehicle.make_and_model) {
-      await supabase.from('vehicles').insert({
-        customer_id: customer.id,
-        license_plate: newVehicle.license_plate,
-        make_and_model: newVehicle.make_and_model,
-        chassis_number_vin: newVehicle.chassis_number_vin || null,
-      } as any)
-    }
-
-    toast.success('تم تسجيل العميل بنجاح')
-    router.push(`/customers/${customer.id}`)
-  }
+  const inputClass = "w-full px-4 py-3 rounded-2xl text-sm transition-all border-2 border-slate-200 bg-white text-slate-700 placeholder-slate-400 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
 
   return (
     <div className="w-full max-w-2xl mx-auto">
       <form onSubmit={handleSearch} className="relative">
         <div className="absolute inset-y-0 right-0 flex items-center pr-5 pointer-events-none">
-          <Phone size={22} className="text-blue-400" />
+          <Phone size={22} className="text-violet-400" />
         </div>
         <input
           ref={inputRef}
@@ -108,13 +80,17 @@ export default function PhoneSearch() {
           value={query}
           onChange={e => setQuery(e.target.value)}
           placeholder="أدخل رقم الهاتف للبحث عن العميل..."
-          className="w-full pr-14 pl-32 py-5 rounded-2xl bg-slate-800/80 border border-slate-700 text-xl text-slate-100 placeholder-slate-500 input-glow transition-all duration-200"
+          className="w-full pr-14 pl-36 py-5 rounded-2xl bg-white border-2 border-slate-200 text-xl text-slate-700 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_4px_rgba(124,58,237,0.1)]"
           dir="rtl"
         />
         <button
           type="submit"
           disabled={loading}
-          className="absolute left-3 inset-y-3 px-6 bg-blue-600 hover:bg-blue-500 disabled:opacity-60 text-white rounded-xl font-semibold flex items-center gap-2 transition-all duration-200 shadow-lg shadow-blue-600/30"
+          className="absolute left-3 inset-y-3 px-6 rounded-xl font-semibold flex items-center gap-2 transition-all duration-200 text-white disabled:opacity-60"
+          style={{
+            background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+            boxShadow: '0 4px 15px rgba(124,58,237,0.35)',
+          }}
         >
           <Search size={18} />
           {loading ? 'جارٍ البحث...' : 'بحث'}
@@ -122,46 +98,50 @@ export default function PhoneSearch() {
       </form>
 
       {result && (
-        <div className="mt-6 glass-card p-6 space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="mt-6 soft-card p-6 space-y-4 animate-fade-up">
           <div className="flex items-start justify-between">
             <div>
-              <h2 className="text-2xl font-bold text-slate-100">{result.customer.name}</h2>
-              <p className="text-slate-400 mt-1 flex items-center gap-2">
+              <h2 className="text-2xl font-bold text-slate-800">{result.customer.name}</h2>
+              <p className="text-slate-500 mt-1 flex items-center gap-2">
                 <Phone size={15} />
                 {result.customer.phone}
               </p>
-              <p className="text-slate-500 text-sm mt-1">منذ: {formatDate(result.customer.created_at)}</p>
+              <p className="text-slate-400 text-sm mt-1">منذ: {formatDate(result.customer.created_at)}</p>
             </div>
             <button
               onClick={() => router.push(`/customers/${result.customer.id}`)}
-              className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+              className="flex items-center gap-1 text-sm text-violet-600 hover:text-violet-700 font-semibold transition-colors"
             >
               الملف الكامل
               <ChevronLeft size={16} />
             </button>
           </div>
 
-          <div className="border-t border-slate-700 pt-4">
-            <h3 className="text-sm font-semibold text-slate-400 mb-3 flex items-center gap-2">
+          <div className="border-t border-slate-100 pt-4">
+            <h3 className="text-sm font-semibold text-slate-500 mb-3 flex items-center gap-2">
               <Car size={16} />
               المركبات ({result.vehicles.length})
             </h3>
             {result.vehicles.length === 0 ? (
-              <p className="text-slate-500 text-sm">لا توجد مركبات مسجلة</p>
+              <p className="text-slate-400 text-sm">لا توجد مركبات مسجلة</p>
             ) : (
               <div className="space-y-3">
                 {result.vehicles.map(vehicle => (
-                  <div key={vehicle.id} className="flex items-center justify-between bg-slate-800/60 rounded-xl p-4">
+                  <div key={vehicle.id} className="flex items-center justify-between bg-slate-50 rounded-2xl p-4 border border-slate-100">
                     <div>
-                      <p className="font-semibold text-slate-200">{vehicle.make_and_model}</p>
-                      <p className="text-slate-400 text-sm">
+                      <p className="font-semibold text-slate-700">{vehicle.make_and_model}</p>
+                      <p className="text-slate-500 text-sm">
                         {vehicle.license_plate}
                         {vehicle.chassis_number_vin && ` · ${vehicle.chassis_number_vin}`}
                       </p>
                     </div>
                     <button
                       onClick={() => handleStartVisit(vehicle.id)}
-                      className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-semibold transition-all duration-200 shadow-lg shadow-emerald-600/20"
+                      className="px-4 py-2 rounded-2xl text-sm font-semibold text-white transition-all duration-200"
+                      style={{
+                        background: 'linear-gradient(135deg, #10b981, #059669)',
+                        boxShadow: '0 4px 12px rgba(16,185,129,0.3)',
+                      }}
                     >
                       فتح زيارة جديدة
                     </button>
@@ -173,72 +153,23 @@ export default function PhoneSearch() {
         </div>
       )}
 
-      {notFound && !showRegisterForm && (
-        <div className="mt-6 glass-card p-6 text-center animate-in fade-in slide-in-from-top-4 duration-300">
-          <p className="text-slate-400 mb-4">
-            لم يتم العثور على عميل بالرقم <span className="text-slate-200 font-mono">{query}</span>
+      {notFound && (
+        <div className="mt-6 soft-card p-6 text-center animate-fade-up">
+          <p className="text-slate-500 mb-4">
+            لم يتم العثور على عميل بالرقم <span className="text-slate-700 font-mono font-bold">{query}</span>
           </p>
           <button
-            onClick={() => setShowRegisterForm(true)}
-            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold transition-all duration-200 shadow-lg shadow-blue-600/30"
+            onClick={() => router.push(`/customers/new?phone=${query}`)}
+            className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl font-semibold text-white transition-all duration-200"
+            style={{
+              background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+              boxShadow: '0 4px 15px rgba(124,58,237,0.35)',
+            }}
           >
             <UserPlus size={18} />
-            تسجيل عميل جديد
+            ➕ إضافة كزبون جديد
           </button>
         </div>
-      )}
-
-      {showRegisterForm && (
-        <form onSubmit={handleRegisterCustomer}
-          className="mt-6 glass-card p-6 space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
-          <h3 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-            <UserPlus size={20} className="text-blue-400" />
-            تسجيل عميل جديد
-          </h3>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">الاسم *</label>
-              <input required value={newCustomer.name} onChange={e => setNewCustomer(p => ({ ...p, name: e.target.value }))}
-                className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 input-glow" />
-            </div>
-            <div>
-              <label className="block text-sm text-slate-400 mb-1">رقم الهاتف *</label>
-              <input required value={newCustomer.phone} onChange={e => setNewCustomer(p => ({ ...p, phone: e.target.value }))}
-                className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 input-glow font-mono" />
-            </div>
-          </div>
-          <div className="border-t border-slate-700 pt-4">
-            <p className="text-sm text-slate-400 mb-3 font-semibold">بيانات المركبة (اختياري)</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">نوع السيارة</label>
-                <input value={newVehicle.make_and_model} onChange={e => setNewVehicle(p => ({ ...p, make_and_model: e.target.value }))}
-                  placeholder="مثال: تويوتا كامري 2020"
-                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 input-glow" />
-              </div>
-              <div>
-                <label className="block text-sm text-slate-400 mb-1">رقم اللوحة</label>
-                <input value={newVehicle.license_plate} onChange={e => setNewVehicle(p => ({ ...p, license_plate: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 input-glow font-mono" />
-              </div>
-              <div className="col-span-2">
-                <label className="block text-sm text-slate-400 mb-1">رقم الشاسيه (VIN)</label>
-                <input value={newVehicle.chassis_number_vin} onChange={e => setNewVehicle(p => ({ ...p, chassis_number_vin: e.target.value }))}
-                  className="w-full px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 input-glow font-mono" />
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-3 justify-end pt-2">
-            <button type="button" onClick={() => setShowRegisterForm(false)}
-              className="px-5 py-2.5 rounded-xl border border-slate-700 text-slate-400 hover:text-slate-200 transition-colors">
-              إلغاء
-            </button>
-            <button type="submit"
-              className="px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-semibold transition-all shadow-lg shadow-blue-600/30">
-              تسجيل
-            </button>
-          </div>
-        </form>
       )}
     </div>
   )

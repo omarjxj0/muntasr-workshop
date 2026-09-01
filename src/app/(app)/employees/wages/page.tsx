@@ -10,11 +10,11 @@ export default async function WagesPage() {
   return (
     <div className="p-6 md:p-10 max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-slate-100 flex items-center gap-3">
-          <CalendarDays size={28} className="text-blue-400" />
+        <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
+          <CalendarDays size={28} className="text-violet-500" />
           رواتب نهاية اليوم
         </h1>
-        <p className="text-slate-400 mt-2">
+        <p className="text-slate-500 mt-2">
           حدد مبلغ أجر كل موظف لليوم ثم اضغط &quot;حفظ الكل&quot;
         </p>
       </div>

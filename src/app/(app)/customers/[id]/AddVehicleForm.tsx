@@ -33,11 +33,14 @@ export default function AddVehicleForm({ customerId }: { customerId: string }) {
     setLoading(false)
   }
 
+  const inputClass = "w-full px-3 py-2.5 rounded-2xl text-sm transition-all border-2 border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
+  const labelClass = "text-xs mb-1 block text-slate-500 font-medium"
+
   if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 text-sm text-blue-400 hover:text-blue-300 transition-colors py-2"
+        className="flex items-center gap-2 text-sm font-semibold transition-colors py-2 text-violet-600 hover:text-violet-700"
       >
         <Plus size={16} />
         إضافة مركبة جديدة
@@ -46,32 +49,53 @@ export default function AddVehicleForm({ customerId }: { customerId: string }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="glass-card p-5 space-y-4 border border-blue-500/20">
-      <h3 className="font-semibold text-slate-200">إضافة مركبة</h3>
+    <form onSubmit={handleSubmit} className="soft-card p-5 space-y-4 border-2 border-violet-100">
+      <h3 className="font-semibold text-slate-700">إضافة مركبة</h3>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs text-slate-400 mb-1 block">نوع السيارة *</label>
-          <input required value={form.make_and_model} onChange={e => setForm(p => ({ ...p, make_and_model: e.target.value }))}
-            className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm input-glow" />
+          <label className={labelClass}>نوع السيارة *</label>
+          <input
+            required
+            value={form.make_and_model}
+            onChange={e => setForm(p => ({ ...p, make_and_model: e.target.value }))}
+            className={inputClass}
+          />
         </div>
         <div>
-          <label className="text-xs text-slate-400 mb-1 block">رقم اللوحة *</label>
-          <input required value={form.license_plate} onChange={e => setForm(p => ({ ...p, license_plate: e.target.value }))}
-            className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm input-glow font-mono" />
+          <label className={labelClass}>رقم اللوحة *</label>
+          <input
+            required
+            value={form.license_plate}
+            onChange={e => setForm(p => ({ ...p, license_plate: e.target.value }))}
+            className={`${inputClass} font-mono`}
+          />
         </div>
         <div className="col-span-2">
-          <label className="text-xs text-slate-400 mb-1 block">رقم الشاسيه (VIN)</label>
-          <input value={form.chassis_number_vin} onChange={e => setForm(p => ({ ...p, chassis_number_vin: e.target.value }))}
-            className="w-full px-3 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 text-sm input-glow font-mono" />
+          <label className={labelClass}>رقم الشاسيه (VIN)</label>
+          <input
+            value={form.chassis_number_vin}
+            onChange={e => setForm(p => ({ ...p, chassis_number_vin: e.target.value }))}
+            className={`${inputClass} font-mono`}
+          />
         </div>
       </div>
       <div className="flex gap-3 justify-end">
-        <button type="button" onClick={() => setOpen(false)}
-          className="px-4 py-2 rounded-xl border border-slate-700 text-slate-400 hover:text-slate-200 text-sm transition-colors">
+        <button
+          type="button"
+          onClick={() => setOpen(false)}
+          className="px-4 py-2 rounded-2xl text-sm font-semibold border-2 border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors"
+        >
           إلغاء
         </button>
-        <button type="submit" disabled={loading}
-          className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition-all disabled:opacity-60">
+        <button
+          type="submit"
+          disabled={loading}
+          className="px-5 py-2 rounded-2xl text-sm font-bold transition-all disabled:opacity-60 text-white"
+          style={{
+            background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+            boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
+          }}
+        >
           {loading ? 'جارٍ الحفظ...' : 'حفظ'}
         </button>
       </div>

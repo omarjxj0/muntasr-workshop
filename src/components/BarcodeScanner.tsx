@@ -92,11 +92,17 @@ export default function BarcodeScanner({ visitId, onPartAdded }: BarcodeScannerP
       <input
         ref={inputRef}
         placeholder="مسح الباركود أو إدخال يدوي..."
-        className="flex-1 px-4 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-100 placeholder-slate-500 input-glow text-sm font-mono"
+        className="flex-1 px-4 py-2.5 rounded-2xl bg-white border-2 border-slate-200 text-slate-700 placeholder-slate-400 text-sm font-mono transition-all focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
         dir="ltr"
       />
-      <button type="submit"
-        className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition-all">
+      <button
+        type="submit"
+        className="px-4 py-2.5 rounded-2xl text-sm font-bold text-white transition-all"
+        style={{
+          background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+          boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
+        }}
+      >
         إضافة
       </button>
     </form>

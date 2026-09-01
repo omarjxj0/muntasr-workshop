@@ -2,8 +2,10 @@
 
 @theme {
   --font-cairo: 'Cairo', sans-serif;
-  --color-brand: #3b82f6;
-  --color-brand-dark: #2563eb;
+  --color-brand: #7c3aed;
+  --color-brand-dark: #6d28d9;
+  --color-brand-pink: #ec4899;
+  --color-bg: #f0f2f7;
 }
 
 * {
@@ -22,58 +24,144 @@ body {
   font-family: var(--font-cairo), system-ui, sans-serif;
 }
 
-/* Custom scrollbar */
+/* ── Scrollbar (light themed) ────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: #e8eaf0;
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
+  background: #c4c9db;
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: #a0a8c0;
 }
 
-/* Glassmorphism card */
+/* ── Soft UI Card ────────────────────────────────────────── */
+/* The primary card component — crisp white, large radius,
+   wide diffused shadow that creates a "floating" effect.    */
+.soft-card {
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow:
+    0 4px 6px -1px rgba(120, 100, 200, 0.06),
+    0 10px 30px -5px rgba(120, 100, 200, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(220, 215, 240, 0.6);
+}
+
+/* Legacy alias — used throughout existing components */
 .glass-card {
-  background: rgba(30, 41, 59, 0.6);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(51, 65, 85, 0.8);
-  border-radius: 16px;
+  background: #ffffff;
+  border-radius: 24px;
+  box-shadow:
+    0 4px 6px -1px rgba(120, 100, 200, 0.06),
+    0 10px 30px -5px rgba(120, 100, 200, 0.1),
+    0 1px 3px rgba(0, 0, 0, 0.04);
+  border: 1px solid rgba(220, 215, 240, 0.6);
 }
 
-/* Glowing input focus */
+/* ── Gradient Button ─────────────────────────────────────── */
+.btn-gradient {
+  background: linear-gradient(135deg, #7c3aed, #ec4899);
+  color: #ffffff;
+  border: none;
+  font-weight: 700;
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 4px 15px rgba(124, 58, 237, 0.35);
+}
+.btn-gradient:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.45);
+}
+.btn-gradient:active {
+  transform: translateY(0);
+}
+
+/* ── Soft Input ──────────────────────────────────────────── */
+.input-soft {
+  background: #f5f6fa;
+  border: 1.5px solid #e2e4ef;
+  border-radius: 14px;
+  color: #1e1b4b;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.input-soft::placeholder {
+  color: #a0a4b8;
+}
+.input-soft:focus {
+  outline: none;
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+  background: #ffffff;
+}
+
+/* Legacy alias */
 .input-glow:focus {
   outline: none;
-  border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
 }
 
-/* Animated gradient text */
+/* ── Gradient Text ───────────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #3b82f6, #8b5cf6, #06b6d4);
+  background: linear-gradient(135deg, #7c3aed, #ec4899);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Sidebar active link */
+/* ── Sidebar Active Link ─────────────────────────────────── */
+/* Used inside the purple sidebar — active = white pill       */
 .sidebar-link-active {
-  background: linear-gradient(90deg, rgba(59,130,246,0.2), transparent);
-  border-right: 3px solid #3b82f6;
-  color: #60a5fa;
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
 }
 
-/* Status badge pulse */
+/* ── Status badge pulse ──────────────────────────────────── */
 @keyframes pulse-soft {
   0%, 100% { opacity: 1; }
-  50%       { opacity: 0.7; }
+  50%       { opacity: 0.6; }
 }
 .pulse-soft {
   animation: pulse-soft 2s ease-in-out infinite;
+}
+
+/* ── Subtle entry animations ─────────────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out both;
+}
+
+/* ── Print Receipt Styles ────────────────────────────────── */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  
+  #thermal-receipt, #thermal-receipt * {
+    visibility: visible;
+  }
+  
+  #thermal-receipt {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 80mm;
+    margin: 0;
+    padding: 0;
+  }
+  
+  @page {
+    margin: 0;
+  }
 }
