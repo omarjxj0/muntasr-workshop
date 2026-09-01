@@ -79,8 +79,8 @@ export default function PhoneSearch() {
           type="tel"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          placeholder="أدخل رقم الهاتف للبحث عن العميل..."
-          className="w-full pr-14 pl-36 py-5 rounded-2xl bg-white border-2 border-slate-200 text-xl text-slate-700 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_4px_rgba(124,58,237,0.1)]"
+          placeholder="أدخل رقم الهاتف..."
+          className="w-full pr-12 pl-32 py-4 md:py-5 rounded-2xl bg-white border-2 border-slate-200 text-base md:text-xl text-slate-700 placeholder-slate-400 transition-all duration-200 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_4px_rgba(124,58,237,0.1)]"
           dir="rtl"
         />
         <button

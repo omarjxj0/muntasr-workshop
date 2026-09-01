@@ -18,10 +18,14 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 body {
   font-family: var(--font-cairo), system-ui, sans-serif;
+  overflow-x: hidden;
+  max-width: 100vw;
 }
 
 /* ── Scrollbar (light themed) ────────────────────────────── */

@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { Cairo } from 'next/font/google'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
@@ -12,6 +12,13 @@ const cairo = Cairo({
 export const metadata: Metadata = {
   title: 'ورشة منتصر - نظام الإدارة',
   description: 'نظام إدارة الصيانة والمخزون لورشة منتصر للكهرباء السيارات',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 }
 
 export default function RootLayout({
