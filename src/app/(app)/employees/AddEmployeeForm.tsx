@@ -50,7 +50,7 @@ export default function AddEmployeeForm() {
   return (
     <form onSubmit={handleSubmit} className="soft-card p-6 space-y-4 border-2 border-amber-100">
       <h3 className="font-bold text-slate-700">إضافة موظف جديد</h3>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label className="text-xs text-slate-500 mb-1 block font-medium">الاسم *</label>
           <input required value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))}

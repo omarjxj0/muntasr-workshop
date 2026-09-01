@@ -170,7 +170,7 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
             <input required {...field('name')} className={inputClass} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>الشركة</label>
               <select {...field('company_id')} className={inputClass}>
@@ -192,7 +192,7 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
             <input {...field('symbols_codes')} className={inputClass} />
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className={labelClass}>الكمية في المخزون</label>
               <input type="number" min="0" {...field('stock_quantity')} className={inputClass} />

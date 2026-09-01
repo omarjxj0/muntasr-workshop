@@ -51,7 +51,7 @@ export default function AddVehicleForm({ customerId }: { customerId: string }) {
   return (
     <form onSubmit={handleSubmit} className="soft-card p-5 space-y-4 border-2 border-violet-100">
       <h3 className="font-semibold text-slate-700">إضافة مركبة</h3>
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <div>
           <label className={labelClass}>نوع السيارة *</label>
           <input
@@ -70,7 +70,7 @@ export default function AddVehicleForm({ customerId }: { customerId: string }) {
             className={`${inputClass} font-mono`}
           />
         </div>
-        <div className="col-span-2">
+        <div className="col-span-1 md:col-span-2">
           <label className={labelClass}>رقم الشاسيه (VIN)</label>
           <input
             value={form.chassis_number_vin}

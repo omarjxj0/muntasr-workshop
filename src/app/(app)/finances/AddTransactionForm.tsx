@@ -49,7 +49,7 @@ export default function AddTransactionForm() {
   return (
     <form onSubmit={handleSubmit} className="soft-card p-5 space-y-4 border-2 border-violet-100">
       <h3 className="font-semibold text-slate-700">معاملة يدوية</h3>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <label className="text-xs text-slate-500 mb-1 block font-medium">النوع</label>
           <select

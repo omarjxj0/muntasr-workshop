@@ -77,53 +77,55 @@ export default function WagesForm({ employees }: Props) {
 
       {/* Employee wage rows */}
       <div className="soft-card overflow-hidden">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-slate-100 text-slate-500 text-sm bg-slate-50/60">
-              <th className="text-right px-6 py-4 font-semibold">الموظف</th>
-              <th className="text-right px-4 py-4 font-semibold">التخصص</th>
-              <th className="text-left px-6 py-4 font-semibold">المبلغ (دينار عراقي)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-50">
-            {employees.map(emp => (
-              <tr key={emp.id} className="hover:bg-violet-50/30 transition-colors">
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-2xl bg-amber-50 border-2 border-amber-100 flex items-center justify-center">
-                      <span className="text-amber-600 font-bold text-sm">{emp.name[0]}</span>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-slate-700">{emp.name}</p>
-                      {emp.phone && <p className="text-xs text-slate-400 font-mono">{emp.phone}</p>}
-                    </div>
-                  </div>
-                </td>
-                <td className="px-4 py-4 text-slate-500 text-sm">{emp.specialization ?? '—'}</td>
-                <td className="px-6 py-4">
-                  <div className="flex items-center gap-3">
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      value={wages[emp.id] || ''}
-                      onChange={e => setWages(p => ({ ...p, [emp.id]: Number(parseArabicNumerals(e.target.value)) || 0 }))}
-                      onBlur={e => setWages(p => ({ ...p, [emp.id]: handleFinancialBlur(e.target.value) || 0 }))}
-                      placeholder="0"
-                      className="w-40 px-4 py-2 rounded-2xl text-sm font-mono transition-all border-2 border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
-                      lang="en"
-                      dir="ltr"
-                    />
-                    {(wages[emp.id] || 0) > 0 && (
-                      <span className="text-emerald-600 text-sm font-semibold">
-                        {formatCurrency(wages[emp.id])}
-                      </span>
-                    )}
-                  </div>
-                </td>
+        <div className="overflow-x-auto w-full pb-2">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-100 text-slate-500 text-sm bg-slate-50/60">
+                <th className="text-right px-6 py-4 font-semibold">الموظف</th>
+                <th className="text-right px-4 py-4 font-semibold">التخصص</th>
+                <th className="text-left px-6 py-4 font-semibold">المبلغ (دينار عراقي)</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {employees.map(emp => (
+                <tr key={emp.id} className="hover:bg-violet-50/30 transition-colors">
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-2xl bg-amber-50 border-2 border-amber-100 flex items-center justify-center">
+                        <span className="text-amber-600 font-bold text-sm">{emp.name[0]}</span>
+                      </div>
+                      <div>
+                        <p className="font-semibold text-slate-700">{emp.name}</p>
+                        {emp.phone && <p className="text-xs text-slate-400 font-mono">{emp.phone}</p>}
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-4 text-slate-500 text-sm">{emp.specialization ?? '—'}</td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={wages[emp.id] || ''}
+                        onChange={e => setWages(p => ({ ...p, [emp.id]: Number(parseArabicNumerals(e.target.value)) || 0 }))}
+                        onBlur={e => setWages(p => ({ ...p, [emp.id]: handleFinancialBlur(e.target.value) || 0 }))}
+                        placeholder="0"
+                        className="w-40 px-4 py-2 rounded-2xl text-sm font-mono transition-all border-2 border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
+                        lang="en"
+                        dir="ltr"
+                      />
+                      {(wages[emp.id] || 0) > 0 && (
+                        <span className="text-emerald-600 text-sm font-semibold">
+                          {formatCurrency(wages[emp.id])}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Total + Save button */}

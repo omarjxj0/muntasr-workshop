@@ -291,46 +291,48 @@ export default function VisitDetailClient({ visitId, role }: Props) {
             {parts.length === 0 ? (
               <div className="text-center py-8 text-slate-400 text-sm">لا توجد قطع مضافة بعد</div>
             ) : (
-              <div className="space-y-2">
-                <div className="grid grid-cols-12 gap-2 text-xs text-slate-400 px-3">
-                  <div className="col-span-5">القطعة</div>
-                  <div className="col-span-2 text-center">الكمية</div>
-                  <div className="col-span-2 text-center">سعر الوحدة</div>
-                  <div className="col-span-2 text-left">الإجمالي</div>
-                  <div className="col-span-1" />
-                </div>
-                {parts.map(part => (
-                  <div key={part.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50 border border-slate-100 rounded-2xl px-3 py-3">
-                    <div className="col-span-5">
-                      <p className="font-semibold text-slate-700 text-sm">{part.ecus?.name}</p>
-                      <p className="text-xs text-slate-400">
-                        {part.ecus?.ecu_companies?.name} · {part.ecus?.ecu_categories?.name}
-                      </p>
-                    </div>
-                    <div className="col-span-2 text-center">
-                      <QuantityInput
-                        partId={part.id}
-                        quantity={part.quantity}
-                        disabled={isLocked}
-                        onUpdate={() => { loadParts(); loadVisit() }}
-                      />
-                    </div>
-                    <div className="col-span-2 text-center text-slate-500 text-sm">
-                      {formatCurrency(part.selling_price_at_time)}
-                    </div>
-                    <div className="col-span-2 text-left font-bold text-emerald-600 text-sm">
-                      {formatCurrency(part.quantity * part.selling_price_at_time)}
-                    </div>
-                    <div className="col-span-1 flex justify-center">
-                      {!isLocked && (
-                        <button onClick={() => handleRemovePart(part.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors rounded-xl hover:bg-rose-50">
-                          <Trash2 size={15} />
-                        </button>
-                      )}
-                    </div>
+              <div className="overflow-x-auto">
+                <div className="min-w-[500px] space-y-2 pb-2">
+                  <div className="grid grid-cols-12 gap-2 text-xs text-slate-400 px-3">
+                    <div className="col-span-5">القطعة</div>
+                    <div className="col-span-2 text-center">الكمية</div>
+                    <div className="col-span-2 text-center">سعر الوحدة</div>
+                    <div className="col-span-2 text-left">الإجمالي</div>
+                    <div className="col-span-1" />
                   </div>
-                ))}
+                  {parts.map(part => (
+                    <div key={part.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50 border border-slate-100 rounded-2xl px-3 py-3">
+                      <div className="col-span-5">
+                        <p className="font-semibold text-slate-700 text-sm">{part.ecus?.name}</p>
+                        <p className="text-xs text-slate-400">
+                          {part.ecus?.ecu_companies?.name} · {part.ecus?.ecu_categories?.name}
+                        </p>
+                      </div>
+                      <div className="col-span-2 text-center">
+                        <QuantityInput
+                          partId={part.id}
+                          quantity={part.quantity}
+                          disabled={isLocked}
+                          onUpdate={() => { loadParts(); loadVisit() }}
+                        />
+                      </div>
+                      <div className="col-span-2 text-center text-slate-500 text-sm">
+                        {formatCurrency(part.selling_price_at_time)}
+                      </div>
+                      <div className="col-span-2 text-left font-bold text-emerald-600 text-sm">
+                        {formatCurrency(part.quantity * part.selling_price_at_time)}
+                      </div>
+                      <div className="col-span-1 flex justify-center">
+                        {!isLocked && (
+                          <button onClick={() => handleRemovePart(part.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors rounded-xl hover:bg-rose-50">
+                            <Trash2 size={15} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
