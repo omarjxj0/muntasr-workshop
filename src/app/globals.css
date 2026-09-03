@@ -151,21 +151,25 @@ body {
   body * {
     visibility: hidden;
   }
-  
+
   #thermal-receipt, #thermal-receipt * {
     visibility: visible;
   }
-  
+
+  /* Half A4 = A5 portrait (148mm × 210mm) */
   #thermal-receipt {
     position: absolute;
-    left: 0;
+    left: 50%;
     top: 0;
-    width: 80mm;
+    transform: translateX(-50%);
+    width: 105mm;
     margin: 0;
-    padding: 0;
+    padding: 8mm;
+    box-sizing: border-box;
   }
-  
+
   @page {
+    size: A5 portrait;
     margin: 0;
   }
 }

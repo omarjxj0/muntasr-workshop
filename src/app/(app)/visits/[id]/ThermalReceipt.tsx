@@ -13,11 +13,19 @@ export default function ThermalReceipt({ visit, vehicle, customer, parts }: Ther
   const grandTotal = (visit.total_amount || 0) + (visit.labor_cost || 0)
 
   return (
-    <div id="thermal-receipt" className="hidden print:block w-[80mm] text-black bg-white mx-auto text-sm font-sans" dir="rtl">
+    <div id="thermal-receipt" className="hidden print:block w-[105mm] text-black bg-white mx-auto text-sm font-sans" dir="rtl">
       {/* Header */}
-      <div className="text-center pb-2">
-        <h1 className="font-bold text-xl mb-1">ورشة منتصر لكهرباء السيارات</h1>
-        <p className="text-xs">هاتف: 07732661509</p>
+      <div className="text-center pb-3">
+        <div className="flex justify-center mb-2">
+          <img
+            src="/logo.jpg"
+            alt="Victor ECU"
+            className="h-16 w-auto object-contain"
+            style={{ maxHeight: '64px' }}
+          />
+        </div>
+        <h1 className="font-bold text-lg leading-tight">ورشة منتصر لكهرباء السيارات</h1>
+        <p className="text-xs mt-0.5">هاتف: 07708981636</p>
       </div>
 
       <div className="border-t border-dashed border-gray-400 my-2"></div>
