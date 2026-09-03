@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { parseArabicNumerals, handleFinancialBlur } from '@/lib/utils'
-import { Package, ArrowRight, Scan } from 'lucide-react'
+import { Package, ArrowRight, Scan, MapPin } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface EcuFormProps {
@@ -20,7 +20,8 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
   const [categories, setCategories] = useState<any[]>([])
   const [form, setForm] = useState({
     name: '', company_id: '', category_id: '', barcode: '',
-    symbols_codes: '', stock_quantity: 0, min_quantity: 3, purchase_price: 0, selling_price: 0,
+    symbols_codes: '', shelf_location: '',
+    stock_quantity: 0, min_quantity: 3, purchase_price: 0, selling_price: 0,
   })
 
   // Ref for auto-focus on barcode field
@@ -40,6 +41,7 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
           category_id: data.category_id ?? '',
           barcode: data.barcode ?? '',
           symbols_codes: data.symbols_codes ?? '',
+          shelf_location: data.shelf_location ?? '',
           stock_quantity: data.stock_quantity ?? 0,
           min_quantity: data.min_quantity ?? 3,
           purchase_price: data.purchase_price ?? 0,
@@ -96,6 +98,7 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
       category_id: form.category_id || null,
       barcode: form.barcode || null,
       symbols_codes: form.symbols_codes || null,
+      shelf_location: form.shelf_location || null,
       stock_quantity: form.stock_quantity,
       min_quantity: form.min_quantity,
       purchase_price: form.purchase_price,
@@ -190,6 +193,23 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
           <div>
             <label className={labelClass}>رموز الأعطال</label>
             <input {...field('symbols_codes')} className={inputClass} />
+          </div>
+
+          <div>
+            <label className={labelClass}>
+              <span className="flex items-center gap-1.5">
+                <MapPin size={14} className="text-violet-500" />
+                موقع الرف
+                <span className="text-xs text-slate-400 font-normal mr-1">مثال: A-3-2</span>
+              </span>
+            </label>
+            <input
+              {...field('shelf_location')}
+              className={`${inputClass} font-mono tracking-wider uppercase`}
+              dir="ltr"
+              placeholder="A-3-2"
+              autoCapitalize="characters"
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
