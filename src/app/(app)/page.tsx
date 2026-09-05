@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server'
 import PhoneSearch from '@/components/PhoneSearch'
-import { Car, Package, Users, TrendingUp, Zap, AlertTriangle, CheckCircle2, ArrowLeft, Wallet } from 'lucide-react'
+import { Car, Package, Users, TrendingUp, AlertTriangle, CheckCircle2, ArrowLeft, Wallet } from 'lucide-react'
+import Image from 'next/image'
 import Link from 'next/link'
 import type { Profile } from '@/lib/types'
 import DashboardAnalytics from './DashboardAnalytics'
@@ -128,13 +129,20 @@ export default async function DashboardPage() {
       <div className="text-center space-y-2">
         <div className="flex justify-center mb-4">
           <div
-            className="w-16 h-16 rounded-3xl flex items-center justify-center"
+            className="w-24 h-24 rounded-3xl overflow-hidden flex items-center justify-center"
             style={{
-              background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
-              boxShadow: '0 8px 25px rgba(124,58,237,0.4)',
+              background: '#ffffff',
+              boxShadow: '0 8px 25px rgba(124,58,237,0.3)',
             }}
           >
-            <Zap size={30} className="text-white" />
+            <Image
+              src="/logo.jpg"
+              alt="ورشة منتصر"
+              width={96}
+              height={96}
+              style={{ objectFit: 'contain' }}
+              priority
+            />
           </div>
         </div>
         <h1 className="text-4xl font-bold gradient-text">ورشة منتصر</h1>

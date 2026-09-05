@@ -1,11 +1,12 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, Car, Package, Users, Wallet, Settings,
-  LogOut, Menu, X, Zap, CalendarDays, UserCheck, ImageOff, MessageSquare, TrendingUp
+  LogOut, Menu, X, CalendarDays, UserCheck, ImageOff, MessageSquare, TrendingUp
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/lib/types'
@@ -63,7 +64,7 @@ export default function Sidebar({ role, appName, appSubtitle, logoUrl }: Sidebar
       <div className="px-3 mb-6">
         <div className="flex items-center gap-3">
           {logoUrl && !imgError ? (
-            <div className="w-11 h-11 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 bg-white/20">
+            <div className="w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 bg-white">
               <img
                 src={logoUrl}
                 alt={displayName}
@@ -73,8 +74,14 @@ export default function Sidebar({ role, appName, appSubtitle, logoUrl }: Sidebar
               />
             </div>
           ) : (
-            <div className="w-11 h-11 rounded-2xl bg-white/20 flex items-center justify-center shadow-lg shadow-black/10">
-              <Zap size={22} className="text-white" />
+            <div className="w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 bg-white">
+              <Image
+                src="/logo.jpg"
+                alt={displayName}
+                width={48}
+                height={48}
+                style={{ objectFit: 'contain' }}
+              />
             </div>
           )}
           <div>
