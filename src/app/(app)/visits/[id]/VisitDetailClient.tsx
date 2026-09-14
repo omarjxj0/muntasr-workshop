@@ -45,7 +45,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
   const loadParts = useCallback(async () => {
     const { data } = await supabase
       .from('used_parts')
-      .select(`*, ecus(*, ecu_companies(name), ecu_categories(name))`)
+      .select(`*, ecus(*)`)
       .eq('visit_id', visitId)
       .order('id') as { data: any[] | null }
     setParts(data ?? [])
@@ -305,7 +305,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
                       <div className="col-span-5">
                         <p className="font-semibold text-slate-700 text-sm">{part.ecus?.name}</p>
                         <p className="text-xs text-slate-400">
-                          {part.ecus?.ecu_companies?.name} · {part.ecus?.ecu_categories?.name}
+                          {[part.ecus?.manufacturer, part.ecus?.ecu_family, part.ecus?.vehicle_model_code, part.ecus?.software_id].filter(Boolean).join(' › ') || '—'}
                         </p>
                       </div>
                       <div className="col-span-2 text-center">

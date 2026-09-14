@@ -6,11 +6,10 @@ export default async function SettingsPage() {
   const supabase = await createClient()
 
   // ── Core settings (always exist) ─────────────────────────
-  const [{ data: companies }, { data: categories }, { data: complaints }] = await Promise.all([
-    supabase.from('ecu_companies').select('*').order('name'),
-    supabase.from('ecu_categories').select('*').order('name'),
-    supabase.from('common_complaints').select('id, name:text').order('created_at'),
-  ])
+  const { data: complaints } = await supabase
+    .from('common_complaints')
+    .select('id, name:text')
+    .order('created_at')
 
   // ── Hierarchy tables (migration 016 — may not exist yet) ─
   // Fetch independently so a missing table never crashes the page.
@@ -45,8 +44,6 @@ export default async function SettingsPage() {
       )}
 
       <SettingsClient
-        companies={companies     ?? []}
-        categories={categories   ?? []}
         complaints={complaints   ?? []}
         manufacturers={mfrRes.data ?? []}
         families={famRes.data     ?? []}

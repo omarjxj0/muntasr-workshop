@@ -23,8 +23,6 @@ interface EcuFormProps {
 
 type FormState = {
   name: string
-  company_id: string
-  category_id: string
   barcode: string
   symbols_codes: string
   shelf_location: string
@@ -47,7 +45,7 @@ type FormState = {
 }
 
 const EMPTY_FORM: FormState = {
-  name: '', company_id: '', category_id: '', barcode: '',
+  name: '', barcode: '',
   symbols_codes: '', shelf_location: '',
   stock_quantity: 0, min_quantity: 3, purchase_price: 0, selling_price: 0,
   quantity: 1, notes: '',
@@ -59,8 +57,6 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
   const router = useRouter()
   const supabase = createClient()
   const [loading, setLoading] = useState(false)
-  const [companies, setCompanies] = useState<any[]>([])
-  const [categories, setCategories] = useState<any[]>([])
 
   // ── Hierarchy DB data ─────────────────────────────────────
   const [dbMfr,  setDbMfr]  = useState<MfrRow[]>([])
@@ -80,15 +76,7 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
 
   useEffect(() => {
     const load = async () => {
-      // ── Essential lookups (always exist) ───────────────────
-      const [{ data: comps }, { data: cats }] = await Promise.all([
-        supabase.from('ecu_companies').select('*').order('name'),
-        supabase.from('ecu_categories').select('*').order('name'),
-      ])
-      setCompanies(comps ?? [])
-      setCategories(cats ?? [])
-
-      // ── Hierarchy tables (migration 016, may not exist yet) ─
+      // ── Hierarchy tables (migration 016) ───────────────────
       const [
         { data: mfrs,  error: eMfr },
         { data: fams  },
@@ -107,7 +95,6 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
       setDbSwId(swids ?? [])
       setHierarchyLoading(false)
 
-
       // ── Edit mode: load ECU and pre-select hierarchy ──────
       if (mode === 'edit' && ecuId) {
         const { data } = await supabase.from('ecus').select('*').eq('id', ecuId).single()
@@ -121,8 +108,6 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
 
         setForm({
           name:           data.name            ?? '',
-          company_id:     data.company_id      ?? '',
-          category_id:    data.category_id     ?? '',
           barcode:        data.barcode         ?? '',
           symbols_codes:  data.symbols_codes   ?? '',
           shelf_location: data.shelf_location  ?? '',
@@ -209,8 +194,6 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
     setLoading(true)
     const payload = {
       name:                form.name,
-      company_id:          form.company_id   || null,
-      category_id:         form.category_id  || null,
       barcode:             form.barcode       || null,
       symbols_codes:       form.symbols_codes || null,
       shelf_location:      form.shelf_location || null,
@@ -376,29 +359,6 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
             <input required {...field('name')} className={inputClass} />
           </div>
 
-          {/* ── Company + Category ── */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>الشركة</label>
-              <div className="relative">
-                <select {...field('company_id')} className={selectClass}>
-                  <option value="">— اختر —</option>
-                  {companies.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <ChevronDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-            </div>
-            <div>
-              <label className={labelClass}>النوع / الفئة</label>
-              <div className="relative">
-                <select {...field('category_id')} className={selectClass}>
-                  <option value="">— اختر —</option>
-                  {categories.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                </select>
-                <ChevronDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              </div>
-            </div>
-          </div>
 
           {/* ════════════════════════════════════════════════════════════
               HIERARCHICAL ECU CLASSIFICATION (dynamic from DB)

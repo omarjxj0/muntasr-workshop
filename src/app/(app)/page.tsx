@@ -59,11 +59,11 @@ export default async function DashboardPage() {
   // Low stock items
   let { data: allEcus, error: allEcusError } = await supabase
     .from('ecus')
-    .select('id, name, barcode, symbols_codes, stock_quantity, min_quantity, ecu_companies(name), ecu_categories(name)')
+    .select('id, name, barcode, symbols_codes, stock_quantity, min_quantity, manufacturer, ecu_family, vehicle_model_code, software_id')
     .order('stock_quantity', { ascending: true })
 
   if (allEcusError) {
-    console.warn("Dashboard Fetch Error (with joins), falling back:", allEcusError)
+    console.warn("Dashboard Fetch Error:", allEcusError)
     const fallback = await supabase
       .from('ecus')
       .select('id, name, barcode, symbols_codes, stock_quantity, min_quantity')
@@ -238,7 +238,7 @@ export default async function DashboardPage() {
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-800 text-sm truncate">{item.name}</p>
                   <p className="text-xs text-slate-400 truncate">
-                    {(item.ecu_companies as any)?.name ?? '—'} · {(item.ecu_categories as any)?.name ?? '—'}
+                    {[item.manufacturer, item.ecu_family, item.vehicle_model_code, item.software_id].filter(Boolean).join(' › ') || '—'}
                   </p>
                 </div>
                 <div className="flex flex-col items-end shrink-0 gap-1">

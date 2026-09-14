@@ -8,8 +8,8 @@ import InventoryActions from './InventoryActions'
 
 interface InventoryClientProps {
   initialEcus: any[]
-  companies: { id: string; name: string }[]
-  categories: { id: string; name: string }[]
+  companies?: { id: string; name: string }[]
+  categories?: { id: string; name: string }[]
   isAdmin: boolean
 }
 
@@ -17,15 +17,19 @@ const ALL_MANUFACTURERS = ['BOSCH', 'SIM2K', 'DELPHI', 'CONTINENTAL', 'DENSO', '
 
 export default function InventoryClient({
   initialEcus,
-  companies,
-  categories,
   isAdmin,
 }: InventoryClientProps) {
   const [search, setSearch] = useState('')
-  const [selectedCompany, setSelectedCompany] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState('')
   const [selectedManufacturer, setSelectedManufacturer] = useState('')
   const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all')
+
+  const availableManufacturers = useMemo(() => {
+    const set = new Set<string>(ALL_MANUFACTURERS)
+    initialEcus?.forEach(e => {
+      if (e.manufacturer) set.add(e.manufacturer)
+    })
+    return Array.from(set)
+  }, [initialEcus])
 
   const filteredEcus = useMemo(() => {
     return (initialEcus || []).filter(item => {
@@ -42,8 +46,6 @@ export default function InventoryClient({
         (item.software_id && item.software_id.toLowerCase().includes(q)) ||
         (item.notes && item.notes.toLowerCase().includes(q))
 
-      const matchesCompany = !selectedCompany || item.company_id === selectedCompany
-      const matchesCategory = !selectedCategory || item.category_id === selectedCategory
       const matchesMfr = !selectedManufacturer || item.manufacturer === selectedManufacturer
 
       const minQty = item.min_quantity ?? 3
@@ -55,9 +57,9 @@ export default function InventoryClient({
         (stockFilter === 'low' && isLow) ||
         (stockFilter === 'out' && isOut)
 
-      return matchesSearch && matchesCompany && matchesCategory && matchesMfr && matchesStock
+      return matchesSearch && matchesMfr && matchesStock
     })
-  }, [initialEcus, search, selectedCompany, selectedCategory, selectedManufacturer, stockFilter])
+  }, [initialEcus, search, selectedManufacturer, stockFilter])
 
   const inputClass =
     'px-3 py-2 rounded-xl text-sm transition-all border-2 border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)] w-full'
@@ -156,51 +158,17 @@ export default function InventoryClient({
         </div>
 
         {/* Filter selects */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+        <div className="flex items-center gap-2">
           {/* Manufacturer filter */}
-          <div className="relative">
+          <div className="relative w-full sm:w-64">
             <select
               value={selectedManufacturer}
               onChange={e => setSelectedManufacturer(e.target.value)}
               className={`${inputClass} appearance-none pr-8`}
             >
-              <option value="">كل الصانعين</option>
-              {ALL_MANUFACTURERS.map(m => (
+              <option value="">كل الصانعين (Manufacturer)</option>
+              {availableManufacturers.map(m => (
                 <option key={m} value={m}>{m}</option>
-              ))}
-            </select>
-            <ChevronDown size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          </div>
-
-          {/* Company filter */}
-          <div className="relative">
-            <select
-              value={selectedCompany}
-              onChange={e => setSelectedCompany(e.target.value)}
-              className={`${inputClass} appearance-none pr-8`}
-            >
-              <option value="">كل الشركات</option>
-              {companies.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-            <ChevronDown size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          </div>
-
-          {/* Category filter */}
-          <div className="relative md:col-span-2">
-            <select
-              value={selectedCategory}
-              onChange={e => setSelectedCategory(e.target.value)}
-              className={`${inputClass} appearance-none pr-8`}
-            >
-              <option value="">كل الأنواع</option>
-              {categories.map(c => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
               ))}
             </select>
             <ChevronDown size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
@@ -254,7 +222,6 @@ export default function InventoryClient({
               <tr className="border-b border-slate-100 text-slate-500 bg-slate-50/60">
                 <th className="text-right px-5 py-4 font-semibold">الاسم</th>
                 <th className="text-right px-4 py-4 font-semibold">التصنيف الهرمي</th>
-                <th className="text-right px-4 py-4 font-semibold">الشركة / النوع</th>
                 <th className="text-right px-4 py-4 font-semibold">الباركود</th>
                 <th className="text-center px-4 py-4 font-semibold">موقع الرف</th>
                 <th className="text-center px-4 py-4 font-semibold">المخزون</th>
@@ -281,12 +248,6 @@ export default function InventoryClient({
                   </td>
                   <td className="px-4 py-3.5">
                     <ClassificationBadges ecu={ecu} />
-                  </td>
-                  <td className="px-4 py-3.5 text-slate-500">
-                    <div className="space-y-0.5">
-                      <p className="text-xs">{(ecu.ecu_companies as any)?.name || companies.find(c => c.id === ecu.company_id)?.name || '—'}</p>
-                      <p className="text-xs text-slate-400">{(ecu.ecu_categories as any)?.name || categories.find(c => c.id === ecu.category_id)?.name || '—'}</p>
-                    </div>
                   </td>
                   <td className="px-4 py-3.5 font-mono text-slate-400 text-xs">
                     {ecu.barcode ?? '—'}
@@ -354,18 +315,6 @@ export default function InventoryClient({
 
             {/* Meta row */}
             <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-              <span>
-                🏢{' '}
-                {(ecu.ecu_companies as any)?.name ||
-                  companies.find(c => c.id === ecu.company_id)?.name ||
-                  'غير محدد'}
-              </span>
-              <span>
-                🔖{' '}
-                {(ecu.ecu_categories as any)?.name ||
-                  categories.find(c => c.id === ecu.category_id)?.name ||
-                  'غير محدد'}
-              </span>
               {ecu.barcode && (
                 <span className="font-mono">📦 {ecu.barcode}</span>
               )}

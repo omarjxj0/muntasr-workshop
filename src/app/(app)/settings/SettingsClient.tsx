@@ -399,8 +399,6 @@ function HierarchyManager({ initMfr, initFam, initMc, initSwId }: HierarchyProps
 // ─── Main SettingsClient ───────────────────────────────────────
 
 interface Props {
-  companies:      { id: string; name: string }[]
-  categories:     { id: string; name: string }[]
   complaints:     { id: string; name: string }[]
   manufacturers:  { id: string; name: string }[]
   families:       { id: string; name: string; manufacturer_id: string }[]
@@ -410,7 +408,7 @@ interface Props {
 }
 
 export default function SettingsClient({
-  companies, categories, complaints,
+  complaints,
   manufacturers, families, modelCodes, softwareIds,
   hierarchyReady,
 }: Props) {
@@ -440,11 +438,9 @@ export default function SettingsClient({
 
       <hr className="border-slate-100" />
 
-      {/* ── Existing lists ─────────────────────────────────── */}
+      {/* ── General settings ─────────────────────────────────── */}
       <section className="space-y-4">
         <h2 className="text-lg font-bold text-slate-800">إعدادات عامة</h2>
-        <ManageList title="شركات ECU"       initialItems={companies}  tableName="ecu_companies" />
-        <ManageList title="فئات ECU"        initialItems={categories} tableName="ecu_categories" />
         <ManageList title="الشكاوى الشائعة" initialItems={complaints} tableName="common_complaints" columnName="text" />
       </section>
     </div>
