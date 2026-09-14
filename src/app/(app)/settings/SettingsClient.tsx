@@ -399,40 +399,44 @@ function HierarchyManager({ initMfr, initFam, initMc, initSwId }: HierarchyProps
 // ─── Main SettingsClient ───────────────────────────────────────
 
 interface Props {
-  companies:   { id: string; name: string }[]
-  categories:  { id: string; name: string }[]
-  complaints:  { id: string; name: string }[]
-  manufacturers: { id: string; name: string }[]
-  families:      { id: string; name: string; manufacturer_id: string }[]
-  modelCodes:    { id: string; name: string; family_id: string }[]
-  softwareIds:   { id: string; name: string; model_code_id: string }[]
+  companies:      { id: string; name: string }[]
+  categories:     { id: string; name: string }[]
+  complaints:     { id: string; name: string }[]
+  manufacturers:  { id: string; name: string }[]
+  families:       { id: string; name: string; manufacturer_id: string }[]
+  modelCodes:     { id: string; name: string; family_id: string }[]
+  softwareIds:    { id: string; name: string; model_code_id: string }[]
+  hierarchyReady: boolean
 }
 
 export default function SettingsClient({
   companies, categories, complaints,
   manufacturers, families, modelCodes, softwareIds,
+  hierarchyReady,
 }: Props) {
   return (
     <div className="space-y-8">
 
-      {/* ── ECU Hierarchy ─────────────────────────────────── */}
-      <section className="space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-violet-100 flex items-center justify-center">
-            <Layers size={18} className="text-violet-600" />
+      {/* ── ECU Hierarchy (only when migration has been run) ─ */}
+      {hierarchyReady && (
+        <section className="space-y-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl bg-violet-100 flex items-center justify-center">
+              <Layers size={18} className="text-violet-600" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-slate-800">تصنيف ECU الهرمي</h2>
+              <p className="text-sm text-slate-400">أضف وأدر الصانعين، العائلات، أكواد الموديل، وأرقام السوفتوير</p>
+            </div>
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-slate-800">تصنيف ECU الهرمي</h2>
-            <p className="text-sm text-slate-400">أضف وأدر الصانعين، العائلات، أكواد الموديل، وأرقام السوفتوير</p>
-          </div>
-        </div>
-        <HierarchyManager
-          initMfr={manufacturers}
-          initFam={families}
-          initMc={modelCodes}
-          initSwId={softwareIds}
-        />
-      </section>
+          <HierarchyManager
+            initMfr={manufacturers}
+            initFam={families}
+            initMc={modelCodes}
+            initSwId={softwareIds}
+          />
+        </section>
+      )}
 
       <hr className="border-slate-100" />
 

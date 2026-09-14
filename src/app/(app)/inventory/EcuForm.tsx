@@ -80,28 +80,33 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
 
   useEffect(() => {
     const load = async () => {
-      const [
-        { data: comps },
-        { data: cats },
-        { data: mfrs },
-        { data: fams },
-        { data: mcs },
-        { data: swids },
-      ] = await Promise.all([
+      // ── Essential lookups (always exist) ───────────────────
+      const [{ data: comps }, { data: cats }] = await Promise.all([
         supabase.from('ecu_companies').select('*').order('name'),
         supabase.from('ecu_categories').select('*').order('name'),
+      ])
+      setCompanies(comps ?? [])
+      setCategories(cats ?? [])
+
+      // ── Hierarchy tables (migration 016, may not exist yet) ─
+      const [
+        { data: mfrs,  error: eMfr },
+        { data: fams  },
+        { data: mcs   },
+        { data: swids },
+      ] = await Promise.all([
         supabase.from('ecu_manufacturers').select('id,name').order('name'),
         supabase.from('ecu_families').select('id,name,manufacturer_id').order('name'),
         supabase.from('ecu_model_codes').select('id,name,family_id').order('name'),
         supabase.from('ecu_software_ids').select('id,name,model_code_id').order('name'),
       ])
-      setCompanies(comps ?? [])
-      setCategories(cats ?? [])
+      if (eMfr) console.warn('[EcuForm] ecu_manufacturers not found — run migration 016')
       setDbMfr(mfrs  ?? [])
       setDbFam(fams  ?? [])
       setDbMc(mcs    ?? [])
       setDbSwId(swids ?? [])
       setHierarchyLoading(false)
+
 
       // ── Edit mode: load ECU and pre-select hierarchy ──────
       if (mode === 'edit' && ecuId) {
