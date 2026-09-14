@@ -90,19 +90,22 @@ export default function InventoryClient({
     )
   }
 
-  // Classification breadcrumb badge row
+  // Hierarchical path badge: SIM2K › 141 › NF › 330
   const ClassificationBadges = ({ ecu }: { ecu: any }) => {
-    const parts: { label: string; color: string }[] = []
-    if (ecu.manufacturer) parts.push({ label: ecu.manufacturer, color: 'bg-blue-50 text-blue-700 border-blue-200' })
-    if (ecu.ecu_family) parts.push({ label: ecu.ecu_family, color: 'bg-indigo-50 text-indigo-700 border-indigo-200' })
-    if (ecu.vehicle_model_code) parts.push({ label: ecu.vehicle_model_code, color: 'bg-purple-50 text-purple-700 border-purple-200' })
-    if (ecu.software_id) parts.push({ label: ecu.software_id, color: 'bg-violet-50 text-violet-700 border-violet-200' })
+    const parts: string[] = []
+    if (ecu.manufacturer) parts.push(ecu.manufacturer)
+    if (ecu.ecu_family) parts.push(ecu.ecu_family)
+    if (ecu.vehicle_model_code) parts.push(ecu.vehicle_model_code)
+    if (ecu.software_id) parts.push(ecu.software_id)
     if (parts.length === 0) return null
     return (
       <div className="flex flex-wrap items-center gap-1">
         {parts.map((p, i) => (
-          <span key={i} className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-semibold border ${p.color}`}>
-            {p.label}
+          <span key={i} className="inline-flex items-center gap-1">
+            {i > 0 && <span className="text-slate-300 text-xs select-none">&gt;</span>}
+            <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-mono font-semibold border bg-slate-50 text-slate-600 border-slate-200">
+              {p}
+            </span>
           </span>
         ))}
       </div>
@@ -290,8 +293,8 @@ export default function InventoryClient({
                   </td>
                   <td className="px-4 py-3.5 text-center">
                     {ecu.shelf_location ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-violet-50 text-violet-700 border border-violet-200 font-mono tracking-wider">
-                        <MapPin size={11} className="text-violet-500" />
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200">
+                        <MapPin size={11} className="text-violet-500 shrink-0" />
                         {ecu.shelf_location}
                       </span>
                     ) : (
@@ -367,8 +370,8 @@ export default function InventoryClient({
                 <span className="font-mono">📦 {ecu.barcode}</span>
               )}
               {ecu.shelf_location && (
-                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-mono font-bold tracking-wider">
-                  <MapPin size={10} className="text-violet-500" />
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-semibold text-xs">
+                  <MapPin size={10} className="text-violet-500 shrink-0" />
                   {ecu.shelf_location}
                 </span>
               )}

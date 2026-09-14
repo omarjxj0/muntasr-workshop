@@ -16,6 +16,18 @@ type HierarchyMap = Record<string, {
 }>
 
 const ECU_HIERARCHY: HierarchyMap = {
+  SIM2K: {
+    families: {
+      '47':  { modelCodes: { NF: ['330', '331', '332', '333'], MG: ['330', '331'], UN: ['330'], TC: ['330'], LM: ['330'], OTHER: [] } },
+      '140': { modelCodes: { NF: ['330', '331', '332'], MG: ['330', '331'], TD: ['330'], OTHER: [] } },
+      '141': { modelCodes: { NF: ['330', '331', '332', '333', '2G330'], MG: ['330', '331', '332'], UN: ['330', '331'], TD: ['330'], TC: ['330', '331'], LM: ['330', '331'], OTHER: [] } },
+      '241': { modelCodes: { NF: ['350', '351', '352'], MG: ['350', '351'], TD: ['350', '351'], TC: ['350'], LM: ['350'], OTHER: [] } },
+      '341': { modelCodes: { NF: ['350', '351', '352'], MG: ['350', '351'], UN: ['350'], OTHER: [] } },
+      '250': { modelCodes: { NF: ['330', '331', '332'], MG: ['330', '331'], OTHER: [] } },
+      '259': { modelCodes: { NF: ['330', '331', '332', '333'], MG: ['330', '331'], UN: ['330'], OTHER: [] } },
+      OTHER: { modelCodes: { OTHER: [] } },
+    },
+  },
   BOSCH: {
     families: {
       '47':  { modelCodes: { NF: ['9P347', '9P348'], MG: ['9MG47'], UN: ['9UN47'], OTHER: [] } },
@@ -24,14 +36,6 @@ const ECU_HIERARCHY: HierarchyMap = {
       '241': { modelCodes: { NF: ['4NF241'], MG: ['4MG241'], UN: ['4UN241'], TD: ['4TD241'], TC: ['4TC241'], LM: ['4LM241'], OTHER: [] } },
       '341': { modelCodes: { NF: ['6NF341'], MG: ['6MG341'], UN: ['6UN341'], JA: ['6JA341'], KA: ['6KA341'], OTHER: [] } },
       '411': { modelCodes: { NF: ['8NF411'], MG: ['8MG411'], OTHER: [] } },
-      OTHER: { modelCodes: { OTHER: [] } },
-    },
-  },
-  SIM2K: {
-    families: {
-      '141': { modelCodes: { NF: ['S141-NF1', 'S141-NF2'], MG: ['S141-MG1'], UN: ['S141-UN1'], OTHER: [] } },
-      '241': { modelCodes: { NF: ['S241-NF1'], MG: ['S241-MG1'], TD: ['S241-TD1'], OTHER: [] } },
-      '341': { modelCodes: { NF: ['S341-NF1'], OTHER: [] } },
       OTHER: { modelCodes: { OTHER: [] } },
     },
   },
@@ -490,15 +494,13 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
               <span className="flex items-center gap-1.5">
                 <MapPin size={14} className="text-violet-500" />
                 موقع الرف
-                <span className="text-xs text-slate-400 font-normal mr-1">مثال: A-3-2</span>
               </span>
             </label>
             <input
               {...field('shelf_location')}
-              className={`${inputClass} font-mono tracking-wider uppercase`}
-              dir="ltr"
-              placeholder="A-3-2"
-              autoCapitalize="characters"
+              className={inputClass}
+              dir="auto"
+              placeholder="مثال: الرف الأول، الرف الثاني، خانة 3"
             />
           </div>
 
