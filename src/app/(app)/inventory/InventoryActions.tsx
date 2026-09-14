@@ -13,7 +13,15 @@ export default function InventoryActions({ ecuId }: { ecuId: string }) {
   const handleDelete = async () => {
     if (!confirm('هل أنت متأكد من حذف هذا الصنف؟')) return
     const { error } = await supabase.from('ecus').delete().eq('id', ecuId)
-    if (error) { toast.error('فشل في حذف الصنف'); return }
+    if (error) {
+      // PostgreSQL FK violation → code 23503
+      if ((error as any).code === '23503') {
+        toast.error('لا يمكن حذف هذا الصنف لأنه مستخدم في زيارات أو طلبات سابقة', { duration: 5000 })
+      } else {
+        toast.error(`فشل في حذف الصنف: ${error.message}`)
+      }
+      return
+    }
     toast.success('تم حذف الصنف')
     router.refresh()
   }

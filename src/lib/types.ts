@@ -59,6 +59,14 @@ export interface Ecu {
   min_quantity?: number
   purchase_price: number
   selling_price: number
+  // Hierarchical classification fields (migration 015)
+  manufacturer: string | null
+  ecu_family: string | null
+  vehicle_model_code: string | null
+  software_id: string | null
+  quantity: number
+  notes: string | null
+  shelf_location: string | null
 }
 
 export interface UsedPart {
