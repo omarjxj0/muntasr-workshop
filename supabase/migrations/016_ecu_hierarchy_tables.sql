@@ -117,7 +117,7 @@ begin
   select id into s259 from ecu_families where name='259' and manufacturer_id=id_sim2k;
 
   -- SIM2K / 47 model codes + software IDs
-  insert into ecu_model_codes(name,family_id) values ('NF',id_sim2k) on conflict do nothing;
+  insert into ecu_model_codes(name,family_id) values ('NF',s47) on conflict do nothing;
   select id into mc from ecu_model_codes where name='NF' and family_id=s47;
   insert into ecu_software_ids(name,model_code_id) values ('330',mc),('331',mc),('332',mc),('333',mc) on conflict do nothing;
 
