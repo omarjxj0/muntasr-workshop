@@ -18,7 +18,7 @@ export default function ThermalReceipt({ visit, vehicle, customer, parts }: Ther
       <div className="text-center pb-3">
         <div className="flex justify-center mb-2">
           <img
-            src="/logo.jpg"
+            src="/logo.png"
             alt="Victor ECU"
             className="h-16 w-auto object-contain"
             style={{ maxHeight: '64px' }}

@@ -1,8 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
-import { Zap, Lock, Mail } from 'lucide-react'
+import { Lock, Mail } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 
@@ -46,14 +47,16 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8 space-y-3">
           <div className="flex justify-center">
-            <div
-              className="w-20 h-20 rounded-3xl flex items-center justify-center"
-              style={{
-                background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
-                boxShadow: '0 12px 35px rgba(124,58,237,0.45)',
-              }}
-            >
-              <Zap size={36} className="text-white" />
+            <div className="w-24 h-24 flex items-center justify-center">
+              <Image
+                src="/logo.png"
+                alt="ورشة منتصر"
+                width={96}
+                height={96}
+                className="w-full h-full object-contain"
+                style={{ objectFit: 'contain' }}
+                priority
+              />
             </div>
           </div>
           <h1 className="text-3xl font-bold gradient-text">ورشة منتصر</h1>

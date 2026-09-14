@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-[#f0f2f7]">
-      <Sidebar role={role} logoUrl="/logo.jpg" />
+      <Sidebar role={role} logoUrl="/logo.png" />
       {/* md:pr-[280px] gives the content breathing room from the fixed right sidebar (width 240px + margin) */}
       <main className="flex-1 overflow-auto md:pr-[280px] w-full pt-20 md:pt-0">
         {children}

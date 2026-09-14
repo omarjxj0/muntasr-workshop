@@ -128,18 +128,13 @@ export default async function DashboardPage() {
       {/* Header */}
       <div className="text-center space-y-2">
         <div className="flex justify-center mb-4">
-          <div
-            className="w-24 h-24 rounded-3xl overflow-hidden flex items-center justify-center"
-            style={{
-              background: '#ffffff',
-              boxShadow: '0 8px 25px rgba(124,58,237,0.3)',
-            }}
-          >
+          <div className="w-24 h-24 flex items-center justify-center">
             <Image
-              src="/logo.jpg"
+              src="/logo.png"
               alt="ورشة منتصر"
               width={96}
               height={96}
+              className="w-full h-full object-contain"
               style={{ objectFit: 'contain' }}
               priority
             />

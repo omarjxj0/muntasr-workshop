@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, Car, Package, Users, Wallet, Settings,
-  LogOut, Menu, X, CalendarDays, UserCheck, ImageOff, MessageSquare, TrendingUp
+  LogOut, Menu, X, CalendarDays, UserCheck, MessageSquare, TrendingUp
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/lib/types'
@@ -44,7 +44,6 @@ export default function Sidebar({ role, appName, appSubtitle, logoUrl }: Sidebar
   const pathname = usePathname()
   const router = useRouter()
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [imgError, setImgError] = useState(false)
   const supabase = createClient()
 
   const displayName     = appName     || 'ورشة منتصر'
@@ -63,27 +62,17 @@ export default function Sidebar({ role, appName, appSubtitle, logoUrl }: Sidebar
       {/* Logo / Branding */}
       <div className="px-3 mb-6">
         <div className="flex items-center gap-3">
-          {logoUrl && !imgError ? (
-            <div className="w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 bg-white">
-              <img
-                src={logoUrl}
-                alt={displayName}
-                className="w-full h-full"
-                style={{ objectFit: 'contain' }}
-                onError={() => setImgError(true)}
-              />
-            </div>
-          ) : (
-            <div className="w-12 h-12 rounded-2xl overflow-hidden flex items-center justify-center shrink-0 bg-white">
-              <Image
-                src="/logo.jpg"
-                alt={displayName}
-                width={48}
-                height={48}
-                style={{ objectFit: 'contain' }}
-              />
-            </div>
-          )}
+          <div className="w-12 h-12 flex items-center justify-center shrink-0">
+            <Image
+              src={logoUrl || '/logo.png'}
+              alt={displayName}
+              width={48}
+              height={48}
+              className="w-full h-full object-contain"
+              style={{ objectFit: 'contain' }}
+              priority
+            />
+          </div>
           <div>
             <h1 className="font-bold text-base leading-tight text-white">
               {displayName}
