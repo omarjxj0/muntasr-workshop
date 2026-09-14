@@ -48,6 +48,29 @@ export interface EcuCategory {
   name: string
 }
 
+export interface EcuManufacturer {
+  id: string
+  name: string
+}
+
+export interface EcuFamily {
+  id: string
+  name: string
+  manufacturer_id: string
+}
+
+export interface EcuModelCode {
+  id: string
+  name: string
+  family_id: string
+}
+
+export interface EcuSoftwareId {
+  id: string
+  name: string
+  model_code_id: string
+}
+
 export interface Ecu {
   id: string
   company_id: string | null
@@ -137,6 +160,10 @@ export type Database = {
       ecu_companies:   { Row: EcuCompany;  Insert: Omit<EcuCompany, 'id'>;  Update: Partial<Omit<EcuCompany, 'id'>> }
       ecu_categories:  { Row: EcuCategory; Insert: Omit<EcuCategory, 'id'>; Update: Partial<Omit<EcuCategory, 'id'>> }
       ecus:            { Row: Ecu;         Insert: Omit<Ecu, 'id'>;          Update: Partial<Omit<Ecu, 'id'>> }
+      ecu_manufacturers: { Row: EcuManufacturer; Insert: Omit<EcuManufacturer, 'id'>; Update: Partial<Omit<EcuManufacturer, 'id'>> }
+      ecu_families:      { Row: EcuFamily;       Insert: Omit<EcuFamily, 'id'>;       Update: Partial<Omit<EcuFamily, 'id'>> }
+      ecu_model_codes:   { Row: EcuModelCode;    Insert: Omit<EcuModelCode, 'id'>;    Update: Partial<Omit<EcuModelCode, 'id'>> }
+      ecu_software_ids:  { Row: EcuSoftwareId;   Insert: Omit<EcuSoftwareId, 'id'>;   Update: Partial<Omit<EcuSoftwareId, 'id'>> }
       used_parts:      { Row: UsedPart;    Insert: Omit<UsedPart, 'id'>;     Update: Partial<Omit<UsedPart, 'id'>> }
       employees:       { Row: Employee;    Insert: Omit<Employee, 'id'>;     Update: Partial<Omit<Employee, 'id'>> }
       daily_wages:     { Row: DailyWage;   Insert: Omit<DailyWage, 'id'>;   Update: Partial<Omit<DailyWage, 'id'>> }
