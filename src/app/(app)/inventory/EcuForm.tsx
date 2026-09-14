@@ -4,74 +4,17 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { parseArabicNumerals, handleFinancialBlur } from '@/lib/utils'
-import { Package, ArrowRight, Scan, MapPin, ChevronDown, FileText } from 'lucide-react'
+import { Package, ArrowRight, Scan, MapPin, ChevronDown, FileText, Loader2, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-// ─── Static Hierarchy Data ──────────────────────────────────────────────────
+// ─── DB Row Types ────────────────────────────────────────────
 
-type HierarchyMap = Record<string, {
-  families: Record<string, {
-    modelCodes: Record<string, string[]>
-  }>
-}>
+type MfrRow   = { id: string; name: string }
+type FamRow   = { id: string; name: string; manufacturer_id: string }
+type McRow    = { id: string; name: string; family_id: string }
+type SwIdRow  = { id: string; name: string; model_code_id: string }
 
-const ECU_HIERARCHY: HierarchyMap = {
-  SIM2K: {
-    families: {
-      '47':  { modelCodes: { NF: ['330', '331', '332', '333'], MG: ['330', '331'], UN: ['330'], TC: ['330'], LM: ['330'], OTHER: [] } },
-      '140': { modelCodes: { NF: ['330', '331', '332'], MG: ['330', '331'], TD: ['330'], OTHER: [] } },
-      '141': { modelCodes: { NF: ['330', '331', '332', '333', '2G330'], MG: ['330', '331', '332'], UN: ['330', '331'], TD: ['330'], TC: ['330', '331'], LM: ['330', '331'], OTHER: [] } },
-      '241': { modelCodes: { NF: ['350', '351', '352'], MG: ['350', '351'], TD: ['350', '351'], TC: ['350'], LM: ['350'], OTHER: [] } },
-      '341': { modelCodes: { NF: ['350', '351', '352'], MG: ['350', '351'], UN: ['350'], OTHER: [] } },
-      '250': { modelCodes: { NF: ['330', '331', '332'], MG: ['330', '331'], OTHER: [] } },
-      '259': { modelCodes: { NF: ['330', '331', '332', '333'], MG: ['330', '331'], UN: ['330'], OTHER: [] } },
-      OTHER: { modelCodes: { OTHER: [] } },
-    },
-  },
-  BOSCH: {
-    families: {
-      '47':  { modelCodes: { NF: ['9P347', '9P348'], MG: ['9MG47'], UN: ['9UN47'], OTHER: [] } },
-      '140': { modelCodes: { NF: ['9NF140'], MG: ['9MG140'], TD: ['9TD140'], OTHER: [] } },
-      '141': { modelCodes: { NF: ['2G330', '2G331', '2G332'], MG: ['2MG330', '2MG331'], UN: ['2UN141'], TD: ['2TD141'], TC: ['2TC141'], LM: ['2LM141'], OTHER: [] } },
-      '241': { modelCodes: { NF: ['4NF241'], MG: ['4MG241'], UN: ['4UN241'], TD: ['4TD241'], TC: ['4TC241'], LM: ['4LM241'], OTHER: [] } },
-      '341': { modelCodes: { NF: ['6NF341'], MG: ['6MG341'], UN: ['6UN341'], JA: ['6JA341'], KA: ['6KA341'], OTHER: [] } },
-      '411': { modelCodes: { NF: ['8NF411'], MG: ['8MG411'], OTHER: [] } },
-      OTHER: { modelCodes: { OTHER: [] } },
-    },
-  },
-  DELPHI: {
-    families: {
-      DCM:  { modelCodes: { NF: ['DCM-NF01', 'DCM-NF02'], MG: ['DCM-MG01'], OTHER: [] } },
-      MT:   { modelCodes: { NF: ['MT-NF1'], TD: ['MT-TD1'], OTHER: [] } },
-      OTHER: { modelCodes: { OTHER: [] } },
-    },
-  },
-  CONTINENTAL: {
-    families: {
-      SIM:  { modelCodes: { NF: ['SIM-NF1'], MG: ['SIM-MG1'], OTHER: [] } },
-      EMS:  { modelCodes: { NF: ['EMS-NF1'], OTHER: [] } },
-      OTHER: { modelCodes: { OTHER: [] } },
-    },
-  },
-  DENSO: {
-    families: {
-      '275900': { modelCodes: { NF: ['275900-NF1'], OTHER: [] } },
-      '276200': { modelCodes: { NF: ['276200-NF1'], OTHER: [] } },
-      OTHER:    { modelCodes: { OTHER: [] } },
-    },
-  },
-  SIEMENS: {
-    families: {
-      SIM: { modelCodes: { NF: ['SGSIM-NF'], OTHER: [] } },
-      VDO: { modelCodes: { NF: ['VDO-NF1'],  OTHER: [] } },
-      OTHER: { modelCodes: { OTHER: [] } },
-    },
-  },
-}
-
-const MANUFACTURERS = [...Object.keys(ECU_HIERARCHY), 'OTHER'] as const
-
-// ─── Component ──────────────────────────────────────────────────────────────
+// ─── Component ──────────────────────────────────────────────
 
 interface EcuFormProps {
   mode: 'new' | 'edit'
@@ -91,15 +34,25 @@ type FormState = {
   selling_price: number
   quantity: number
   notes: string
-  // Hierarchy
-  manufacturer: string
+  // Hierarchy — DB IDs (drive cascade filtering)
+  manufacturer_id: string
+  family_id: string
+  model_code_id: string
+  software_id_ref: string
+  // Hierarchy — free-text when CUSTOM is chosen
   manufacturerCustom: string
-  ecu_family: string
   familyCustom: string
-  vehicle_model_code: string
   modelCodeCustom: string
-  software_id: string
   softwareIdCustom: string
+}
+
+const EMPTY_FORM: FormState = {
+  name: '', company_id: '', category_id: '', barcode: '',
+  symbols_codes: '', shelf_location: '',
+  stock_quantity: 0, min_quantity: 3, purchase_price: 0, selling_price: 0,
+  quantity: 1, notes: '',
+  manufacturer_id: '', family_id: '', model_code_id: '', software_id_ref: '',
+  manufacturerCustom: '', familyCustom: '', modelCodeCustom: '', softwareIdCustom: '',
 }
 
 export default function EcuForm({ mode, ecuId }: EcuFormProps) {
@@ -109,75 +62,92 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
   const [companies, setCompanies] = useState<any[]>([])
   const [categories, setCategories] = useState<any[]>([])
 
-  const [form, setForm] = useState<FormState>({
-    name: '', company_id: '', category_id: '', barcode: '',
-    symbols_codes: '', shelf_location: '',
-    stock_quantity: 0, min_quantity: 3, purchase_price: 0, selling_price: 0,
-    quantity: 1, notes: '',
-    manufacturer: '', manufacturerCustom: '',
-    ecu_family: '', familyCustom: '',
-    vehicle_model_code: '', modelCodeCustom: '',
-    software_id: '', softwareIdCustom: '',
-  })
+  // ── Hierarchy DB data ─────────────────────────────────────
+  const [dbMfr,  setDbMfr]  = useState<MfrRow[]>([])
+  const [dbFam,  setDbFam]  = useState<FamRow[]>([])
+  const [dbMc,   setDbMc]   = useState<McRow[]>([])
+  const [dbSwId, setDbSwId] = useState<SwIdRow[]>([])
+  const [hierarchyLoading, setHierarchyLoading] = useState(true)
 
-  // Ref for auto-focus on barcode field
+  const [form, setForm] = useState<FormState>(EMPTY_FORM)
+
+  // Ref for barcode scanner
   const barcodeRef = useRef<HTMLInputElement>(null)
-  const bufferRef = useRef('')
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const bufferRef  = useRef('')
+  const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Load lookup tables ────────────────────────────────────
 
   useEffect(() => {
-    supabase.from('ecu_companies').select('*').order('name').then(({ data }) => setCompanies(data ?? []))
-    supabase.from('ecu_categories').select('*').order('name').then(({ data }) => setCategories(data ?? []))
+    const load = async () => {
+      const [
+        { data: comps },
+        { data: cats },
+        { data: mfrs },
+        { data: fams },
+        { data: mcs },
+        { data: swids },
+      ] = await Promise.all([
+        supabase.from('ecu_companies').select('*').order('name'),
+        supabase.from('ecu_categories').select('*').order('name'),
+        supabase.from('ecu_manufacturers').select('id,name').order('name'),
+        supabase.from('ecu_families').select('id,name,manufacturer_id').order('name'),
+        supabase.from('ecu_model_codes').select('id,name,family_id').order('name'),
+        supabase.from('ecu_software_ids').select('id,name,model_code_id').order('name'),
+      ])
+      setCompanies(comps ?? [])
+      setCategories(cats ?? [])
+      setDbMfr(mfrs  ?? [])
+      setDbFam(fams  ?? [])
+      setDbMc(mcs    ?? [])
+      setDbSwId(swids ?? [])
+      setHierarchyLoading(false)
 
-    if (mode === 'edit' && ecuId) {
-      supabase.from('ecus').select('*').eq('id', ecuId).single().then(({ data }: { data: any }) => {
+      // ── Edit mode: load ECU and pre-select hierarchy ──────
+      if (mode === 'edit' && ecuId) {
+        const { data } = await supabase.from('ecus').select('*').eq('id', ecuId).single()
         if (!data) return
-        const mfr = data.manufacturer ?? ''
-        const knownMfr = MANUFACTURERS.slice(0, -1).includes(mfr) ? mfr : (mfr ? 'OTHER' : '')
-        const fam = data.ecu_family ?? ''
-        const knownFams = knownMfr && knownMfr !== 'OTHER' ? Object.keys(ECU_HIERARCHY[knownMfr]?.families ?? {}) : []
-        const knownFam = knownFams.includes(fam) ? fam : (fam ? 'OTHER' : '')
-        const mc = data.vehicle_model_code ?? ''
-        const knownMCs = (knownMfr && knownMfr !== 'OTHER' && knownFam && knownFam !== 'OTHER')
-          ? Object.keys(ECU_HIERARCHY[knownMfr]?.families[knownFam]?.modelCodes ?? {})
-          : []
-        const knownMC = knownMCs.includes(mc) ? mc : (mc ? 'OTHER' : '')
-        const sid = data.software_id ?? ''
-        const knownSIDs = (knownMfr && knownMfr !== 'OTHER' && knownFam && knownFam !== 'OTHER' && knownMC && knownMC !== 'OTHER')
-          ? ECU_HIERARCHY[knownMfr]?.families[knownFam]?.modelCodes[knownMC] ?? []
-          : []
-        const knownSID = knownSIDs.includes(sid) ? sid : (sid ? 'OTHER' : '')
+
+        // Match stored name strings back to DB rows
+        const mfrRow  = (mfrs  ?? []).find((m: MfrRow) => m.name === data.manufacturer)
+        const famRow  = (fams  ?? []).find((f: FamRow) => f.name === data.ecu_family && f.manufacturer_id === mfrRow?.id)
+        const mcRow   = (mcs   ?? []).find((mc: McRow) => mc.name === data.vehicle_model_code && mc.family_id === famRow?.id)
+        const swIdRow = (swids ?? []).find((s: SwIdRow) => s.name === data.software_id && s.model_code_id === mcRow?.id)
 
         setForm({
-          name: data.name ?? '',
-          company_id: data.company_id ?? '',
-          category_id: data.category_id ?? '',
-          barcode: data.barcode ?? '',
-          symbols_codes: data.symbols_codes ?? '',
-          shelf_location: data.shelf_location ?? '',
-          stock_quantity: data.stock_quantity ?? 0,
-          min_quantity: data.min_quantity ?? 3,
-          purchase_price: data.purchase_price ?? 0,
-          selling_price: data.selling_price ?? 0,
-          quantity: data.quantity ?? 1,
-          notes: data.notes ?? '',
-          manufacturer: knownMfr,
-          manufacturerCustom: knownMfr === 'OTHER' ? mfr : '',
-          ecu_family: knownFam,
-          familyCustom: knownFam === 'OTHER' ? fam : '',
-          vehicle_model_code: knownMC,
-          modelCodeCustom: knownMC === 'OTHER' ? mc : '',
-          software_id: knownSID,
-          softwareIdCustom: knownSID === 'OTHER' ? sid : '',
+          name:           data.name            ?? '',
+          company_id:     data.company_id      ?? '',
+          category_id:    data.category_id     ?? '',
+          barcode:        data.barcode         ?? '',
+          symbols_codes:  data.symbols_codes   ?? '',
+          shelf_location: data.shelf_location  ?? '',
+          stock_quantity: data.stock_quantity  ?? 0,
+          min_quantity:   data.min_quantity    ?? 3,
+          purchase_price: data.purchase_price  ?? 0,
+          selling_price:  data.selling_price   ?? 0,
+          quantity:       data.quantity        ?? 1,
+          notes:          data.notes           ?? '',
+          // IDs (empty string = not found in DB → use CUSTOM)
+          manufacturer_id:  mfrRow?.id  ?? (data.manufacturer      ? 'CUSTOM' : ''),
+          family_id:        famRow?.id  ?? (data.ecu_family         ? 'CUSTOM' : ''),
+          model_code_id:    mcRow?.id   ?? (data.vehicle_model_code ? 'CUSTOM' : ''),
+          software_id_ref:  swIdRow?.id ?? (data.software_id        ? 'CUSTOM' : ''),
+          // Custom fallback text
+          manufacturerCustom: mfrRow  ? '' : (data.manufacturer      ?? ''),
+          familyCustom:       famRow  ? '' : (data.ecu_family         ?? ''),
+          modelCodeCustom:    mcRow   ? '' : (data.vehicle_model_code ?? ''),
+          softwareIdCustom:   swIdRow ? '' : (data.software_id        ?? ''),
         })
-      })
+      }
     }
 
+    load()
     const t = setTimeout(() => barcodeRef.current?.focus(), 120)
     return () => clearTimeout(t)
-  }, [mode, ecuId, supabase])
+  }, [mode, ecuId]) // eslint-disable-line
 
-  // Global barcode scanner keyboard listener
+  // ── Barcode scanner ───────────────────────────────────────
+
   useEffect(() => {
     const handleKeydown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement
@@ -203,61 +173,52 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
     return () => window.removeEventListener('keydown', handleKeydown)
   }, [])
 
-  // ── Derived cascade values ────────────────────────────────────────────────
+  // ── Cascade derived lists ─────────────────────────────────
+
+  const availableFamilies = dbFam.filter(f => f.manufacturer_id === form.manufacturer_id)
+  const availableModelCodes = dbMc.filter(mc => mc.family_id === form.family_id)
+  const availableSoftwareIds = dbSwId.filter(s => s.model_code_id === form.model_code_id)
+
+  // ── Resolved name strings (for payload + breadcrumb) ──────
 
   const resolvedManufacturer =
-    form.manufacturer === 'OTHER' ? form.manufacturerCustom :
-    form.manufacturer
-
-  const availableFamilies =
-    form.manufacturer && form.manufacturer !== 'OTHER'
-      ? Object.keys(ECU_HIERARCHY[form.manufacturer]?.families ?? {})
-      : []
+    form.manufacturer_id === 'CUSTOM' ? form.manufacturerCustom
+    : dbMfr.find(m => m.id === form.manufacturer_id)?.name ?? ''
 
   const resolvedFamily =
-    form.ecu_family === 'OTHER' ? form.familyCustom : form.ecu_family
-
-  const availableModelCodes =
-    form.manufacturer && form.manufacturer !== 'OTHER' &&
-    form.ecu_family && form.ecu_family !== 'OTHER'
-      ? Object.keys(ECU_HIERARCHY[form.manufacturer]?.families[form.ecu_family]?.modelCodes ?? {})
-      : []
+    form.family_id === 'CUSTOM' ? form.familyCustom
+    : dbFam.find(f => f.id === form.family_id)?.name ?? ''
 
   const resolvedModelCode =
-    form.vehicle_model_code === 'OTHER' ? form.modelCodeCustom : form.vehicle_model_code
-
-  const availableSoftwareIds =
-    form.manufacturer && form.manufacturer !== 'OTHER' &&
-    form.ecu_family && form.ecu_family !== 'OTHER' &&
-    form.vehicle_model_code && form.vehicle_model_code !== 'OTHER'
-      ? ECU_HIERARCHY[form.manufacturer]?.families[form.ecu_family]?.modelCodes[form.vehicle_model_code] ?? []
-      : []
+    form.model_code_id === 'CUSTOM' ? form.modelCodeCustom
+    : dbMc.find(mc => mc.id === form.model_code_id)?.name ?? ''
 
   const resolvedSoftwareId =
-    form.software_id === 'OTHER' ? form.softwareIdCustom : form.software_id
+    form.software_id_ref === 'CUSTOM' ? form.softwareIdCustom
+    : dbSwId.find(s => s.id === form.software_id_ref)?.name ?? ''
 
-  // ── Submit ────────────────────────────────────────────────────────────────
+  // ── Submit ────────────────────────────────────────────────
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
     const payload = {
-      name: form.name,
-      company_id: form.company_id || null,
-      category_id: form.category_id || null,
-      barcode: form.barcode || null,
-      symbols_codes: form.symbols_codes || null,
-      shelf_location: form.shelf_location || null,
-      stock_quantity: form.stock_quantity,
-      min_quantity: form.min_quantity,
-      purchase_price: form.purchase_price,
-      selling_price: form.selling_price,
-      quantity: form.quantity,
-      notes: form.notes || null,
-      manufacturer: resolvedManufacturer || null,
-      ecu_family: resolvedFamily || null,
-      vehicle_model_code: resolvedModelCode || null,
-      software_id: resolvedSoftwareId || null,
+      name:                form.name,
+      company_id:          form.company_id   || null,
+      category_id:         form.category_id  || null,
+      barcode:             form.barcode       || null,
+      symbols_codes:       form.symbols_codes || null,
+      shelf_location:      form.shelf_location || null,
+      stock_quantity:      form.stock_quantity,
+      min_quantity:        form.min_quantity,
+      purchase_price:      form.purchase_price,
+      selling_price:       form.selling_price,
+      quantity:            form.quantity,
+      notes:               form.notes         || null,
+      manufacturer:        resolvedManufacturer  || null,
+      ecu_family:          resolvedFamily        || null,
+      vehicle_model_code:  resolvedModelCode     || null,
+      software_id:         resolvedSoftwareId    || null,
     }
 
     const { error } = mode === 'new'
@@ -284,72 +245,86 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
       setForm(p => ({ ...p, [key]: handleFinancialBlur(e.target.value) || 0 })),
   })
 
-  const inputClass = "w-full px-4 py-3 rounded-2xl text-sm transition-all border-2 border-slate-200 bg-white text-slate-700 placeholder-slate-400 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
-  const labelClass = "text-sm text-slate-500 mb-1.5 block font-medium"
+  const inputClass  = "w-full px-4 py-3 rounded-2xl text-sm transition-all border-2 border-slate-200 bg-white text-slate-700 placeholder-slate-400 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
+  const labelClass  = "text-sm text-slate-500 mb-1.5 block font-medium"
   const selectClass = `${inputClass} appearance-none cursor-pointer pr-10`
 
-  // ── Cascading select helper ───────────────────────────────────────────────
+  // ── Cascading select helper ───────────────────────────────
+  // items: { id, name }[] — id='CUSTOM' triggers text input
+  // selectedId: the current value (uuid | 'CUSTOM' | '')
 
   const CascadeSelect = ({
-    label, value, onChange, options, placeholder, disabled, customValue, onCustomChange, showBadge,
+    label, selectedId, onSelect, items, placeholder, disabled, customValue,
+    onCustomChange, showBadge, isLoading,
   }: {
     label: string
-    value: string
-    onChange: (v: string) => void
-    options: string[]
+    selectedId: string
+    onSelect: (id: string) => void
+    items: { id: string; name: string }[]
     placeholder: string
     disabled?: boolean
     customValue: string
     onCustomChange: (v: string) => void
     showBadge?: string
-  }) => (
-    <div className="space-y-2">
-      <label className={labelClass}>
-        {label}
-        {showBadge && (
-          <span className="mr-2 text-xs font-mono bg-violet-50 text-violet-600 border border-violet-200 px-2 py-0.5 rounded-full">
-            {showBadge}
-          </span>
-        )}
-      </label>
-      <div className="relative">
-        <select
-          value={value}
-          onChange={e => {
-            onChange(e.target.value)
-          }}
-          disabled={disabled}
-          className={`${selectClass} ${disabled ? 'opacity-40 cursor-not-allowed bg-slate-50' : ''}`}
-        >
-          <option value="">{placeholder}</option>
-          {options.map(o => (
-            <option key={o} value={o}>{o === 'OTHER' ? '✏️ أخرى...' : o}</option>
-          ))}
-          {!options.includes('OTHER') && <option value="OTHER">✏️ أخرى...</option>}
-        </select>
-        <ChevronDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-      </div>
-      {value === 'OTHER' && (
-        <input
-          type="text"
-          value={customValue}
-          onChange={e => onCustomChange(e.target.value)}
-          placeholder="اكتب القيمة..."
-          className={`${inputClass} font-mono`}
-          dir="ltr"
-          autoFocus
-        />
-      )}
-    </div>
-  )
+    isLoading?: boolean
+  }) => {
+    const isEmpty = !isLoading && !disabled && items.length === 0 && !!selectedId
 
-  // ─── Hierarchy breadcrumb preview ─────────────────────────────────────────
+    return (
+      <div className="space-y-2">
+        <label className={labelClass}>
+          {label}
+          {showBadge && (
+            <span className="mr-2 text-xs font-mono bg-violet-50 text-violet-600 border border-violet-200 px-2 py-0.5 rounded-full">
+              {showBadge}
+            </span>
+          )}
+          {isLoading && <Loader2 size={12} className="inline mr-2 animate-spin text-violet-400" />}
+        </label>
+
+        {/* Inline quick-add hint when parent has no children yet */}
+        {isEmpty && (
+          <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 flex items-center gap-1.5">
+            <Plus size={12} />
+            لا توجد خيارات — يمكنك إضافتها من <strong>الإعدادات</strong> أو الكتابة مباشرة أدناه
+          </p>
+        )}
+
+        <div className="relative">
+          <select
+            value={selectedId}
+            onChange={e => onSelect(e.target.value)}
+            disabled={disabled || isLoading}
+            className={`${selectClass} ${(disabled || isLoading) ? 'opacity-40 cursor-not-allowed bg-slate-50' : ''}`}
+          >
+            <option value="">{placeholder}</option>
+            {items.map(o => (
+              <option key={o.id} value={o.id}>{o.name}</option>
+            ))}
+            <option value="CUSTOM">✏️ أخرى / كتابة يدوية...</option>
+          </select>
+          <ChevronDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+        </div>
+
+        {(selectedId === 'CUSTOM' || isEmpty) && (
+          <input
+            type="text"
+            value={customValue}
+            onChange={e => onCustomChange(e.target.value)}
+            placeholder="اكتب القيمة..."
+            className={`${inputClass} font-mono`}
+            dir="ltr"
+            autoFocus={selectedId === 'CUSTOM'}
+          />
+        )}
+      </div>
+    )
+  }
+
+  // ── Breadcrumb preview ────────────────────────────────────
 
   const breadcrumbParts = [
-    resolvedManufacturer,
-    resolvedFamily,
-    resolvedModelCode,
-    resolvedSoftwareId,
+    resolvedManufacturer, resolvedFamily, resolvedModelCode, resolvedSoftwareId,
   ].filter(Boolean)
 
   return (
@@ -421,13 +396,13 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
           </div>
 
           {/* ════════════════════════════════════════════════════════════
-              HIERARCHICAL ECU CLASSIFICATION
+              HIERARCHICAL ECU CLASSIFICATION (dynamic from DB)
               ════════════════════════════════════════════════════════════ */}
           <div className="space-y-4 rounded-2xl border-2 border-violet-100 bg-violet-50/40 p-5">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-2">
               <p className="text-sm font-bold text-violet-700">تصنيف ECU الهرمي</p>
               {breadcrumbParts.length > 0 && (
-                <p className="text-xs font-mono text-violet-500 bg-white border border-violet-200 px-3 py-1 rounded-full truncate max-w-[200px]">
+                <p className="text-xs font-mono text-violet-500 bg-white border border-violet-200 px-3 py-1 rounded-full truncate max-w-[220px]">
                   {breadcrumbParts.join(' › ')}
                 </p>
               )}
@@ -436,49 +411,68 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
             {/* Level 1: Manufacturer */}
             <CascadeSelect
               label="1. الصانع (Manufacturer)"
-              value={form.manufacturer}
-              onChange={v => setForm(p => ({ ...p, manufacturer: v, ecu_family: '', familyCustom: '', vehicle_model_code: '', modelCodeCustom: '', software_id: '', softwareIdCustom: '' }))}
-              options={[...Object.keys(ECU_HIERARCHY)]}
+              selectedId={form.manufacturer_id}
+              onSelect={v => setForm(p => ({
+                ...p,
+                manufacturer_id: v, manufacturerCustom: '',
+                family_id: '', familyCustom: '',
+                model_code_id: '', modelCodeCustom: '',
+                software_id_ref: '', softwareIdCustom: '',
+              }))}
+              items={dbMfr}
               placeholder="— اختر الصانع —"
               customValue={form.manufacturerCustom}
               onCustomChange={v => setForm(p => ({ ...p, manufacturerCustom: v }))}
+              isLoading={hierarchyLoading}
             />
 
-            {/* Level 2: ECU Family */}
+            {/* Level 2: Family */}
             <CascadeSelect
               label="2. العائلة (Family)"
-              value={form.ecu_family}
-              onChange={v => setForm(p => ({ ...p, ecu_family: v, vehicle_model_code: '', modelCodeCustom: '', software_id: '', softwareIdCustom: '' }))}
-              options={availableFamilies}
-              placeholder={form.manufacturer ? '— اختر العائلة —' : '— اختر الصانع أولاً —'}
-              disabled={!form.manufacturer}
+              selectedId={form.family_id}
+              onSelect={v => setForm(p => ({
+                ...p,
+                family_id: v, familyCustom: '',
+                model_code_id: '', modelCodeCustom: '',
+                software_id_ref: '', softwareIdCustom: '',
+              }))}
+              items={availableFamilies}
+              placeholder={form.manufacturer_id ? '— اختر العائلة —' : '— اختر الصانع أولاً —'}
+              disabled={!form.manufacturer_id}
               customValue={form.familyCustom}
               onCustomChange={v => setForm(p => ({ ...p, familyCustom: v }))}
+              isLoading={hierarchyLoading}
             />
 
-            {/* Level 3: Vehicle Model Code */}
+            {/* Level 3: Model Code */}
             <CascadeSelect
               label="3. كود الموديل (Model Code)"
-              value={form.vehicle_model_code}
-              onChange={v => setForm(p => ({ ...p, vehicle_model_code: v, software_id: '', softwareIdCustom: '' }))}
-              options={availableModelCodes}
-              placeholder={form.ecu_family ? '— اختر كود الموديل —' : '— اختر العائلة أولاً —'}
-              disabled={!form.ecu_family}
+              selectedId={form.model_code_id}
+              onSelect={v => setForm(p => ({
+                ...p,
+                model_code_id: v, modelCodeCustom: '',
+                software_id_ref: '', softwareIdCustom: '',
+              }))}
+              items={availableModelCodes}
+              placeholder={form.family_id ? '— اختر كود الموديل —' : '— اختر العائلة أولاً —'}
+              disabled={!form.family_id}
               customValue={form.modelCodeCustom}
               onCustomChange={v => setForm(p => ({ ...p, modelCodeCustom: v }))}
+              isLoading={hierarchyLoading}
             />
 
             {/* Level 4: Software / Part ID */}
             <CascadeSelect
               label="4. Software / Part ID"
-              value={form.software_id}
-              onChange={v => setForm(p => ({ ...p, software_id: v }))}
-              options={availableSoftwareIds}
-              placeholder={form.vehicle_model_code ? '— اختر Software ID —' : '— اختر الموديل أولاً —'}
-              disabled={!form.vehicle_model_code}
+              selectedId={form.software_id_ref}
+              onSelect={v => setForm(p => ({ ...p, software_id_ref: v, softwareIdCustom: '' }))}
+              items={availableSoftwareIds}
+              placeholder={form.model_code_id ? '— اختر Software ID —' : '— اختر الموديل أولاً —'}
+              disabled={!form.model_code_id}
               customValue={form.softwareIdCustom}
               onCustomChange={v => setForm(p => ({ ...p, softwareIdCustom: v }))}
               showBadge={resolvedSoftwareId || undefined}
+              isLoading={hierarchyLoading}
             />
           </div>
 
