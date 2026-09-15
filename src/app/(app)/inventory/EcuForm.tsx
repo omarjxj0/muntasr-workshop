@@ -67,10 +67,11 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
 
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
 
-  // Ref for barcode scanner
-  const barcodeRef = useRef<HTMLInputElement>(null)
-  const bufferRef  = useRef('')
-  const timerRef   = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Ref for barcode scanner and name input
+  const barcodeRef    = useRef<HTMLInputElement>(null)
+  const nameInputRef  = useRef<HTMLInputElement>(null)
+  const bufferRef     = useRef('')
+  const timerRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Load lookup tables ────────────────────────────────────
 
@@ -145,11 +146,12 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
       const isOtherInput = (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') && !isBarcodeField
       if (isOtherInput) return
       if (e.key === 'Enter') {
+        e.preventDefault()
         const scanned = bufferRef.current.trim()
         bufferRef.current = ''
         if (scanned && scanned.length > 3) {
           setForm(prev => ({ ...prev, barcode: scanned }))
-          barcodeRef.current?.focus()
+          nameInputRef.current?.focus()
         }
         return
       }
@@ -191,11 +193,29 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // Explicit validation before saving
+    if (!form.name.trim()) {
+      toast.error('يرجى إدخال اسم الصنف أولاً')
+      nameInputRef.current?.focus()
+      return
+    }
+
+    if (form.stock_quantity < 0) {
+      toast.error('الكمية في المخزون لا يمكن أن تكون سالبة')
+      return
+    }
+
+    if (form.purchase_price < 0 || form.selling_price < 0) {
+      toast.error('الأسعار لا يمكن أن تكون سالبة')
+      return
+    }
+
     setLoading(true)
     const payload = {
-      name:                form.name,
-      barcode:             form.barcode       || null,
-      symbols_codes:       form.symbols_codes || null,
+      name:                form.name.trim(),
+      barcode:             form.barcode.trim() || null,
+      symbols_codes:       form.symbols_codes  || null,
       shelf_location:      form.shelf_location || null,
       stock_quantity:      form.stock_quantity,
       min_quantity:        form.min_quantity,
@@ -206,7 +226,6 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
       manufacturer:        resolvedManufacturer  || null,
       ecu_family:          resolvedFamily        || null,
       vehicle_model_code:  resolvedModelCode     || null,
-      software_id:         resolvedSoftwareId    || null,
     }
 
     const { error } = mode === 'new'
@@ -331,14 +350,22 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
           {mode === 'new' ? 'إضافة صنف جديد' : 'تعديل الصنف'}
         </h1>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form
+          onSubmit={handleSubmit}
+          onKeyDown={e => {
+            if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'TEXTAREA') {
+              e.preventDefault()
+            }
+          }}
+          className="space-y-5"
+        >
 
-          {/* ── Barcode ── */}
+          {/* ── Barcode / VIN ── */}
           <div>
             <label className={labelClass}>
               <span className="flex items-center gap-1.5">
                 <Scan size={14} className="text-violet-500" />
-                الباركود
+                الباركود / رقم الشاسيه (VIN)
                 <span className="text-xs text-violet-500 bg-violet-50 px-2 py-0.5 rounded-full mr-1">مسح تلقائي</span>
               </span>
             </label>
@@ -346,17 +373,29 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
               ref={barcodeRef}
               value={form.barcode}
               onChange={e => setForm(p => ({ ...p, barcode: e.target.value }))}
+              onKeyDown={e => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  nameInputRef.current?.focus()
+                }
+              }}
               autoFocus
               className={`${inputClass} font-mono`}
               dir="ltr"
-              placeholder="امسح الباركود أو اكتبه يدوياً..."
+              placeholder="امسح الباركود / VIN أو اكتبه يدوياً..."
             />
           </div>
 
           {/* ── Name ── */}
           <div>
             <label className={labelClass}>اسم الصنف *</label>
-            <input required {...field('name')} className={inputClass} />
+            <input
+              ref={nameInputRef}
+              required
+              {...field('name')}
+              placeholder="مثال: كمبيوتر سوناتا 2011"
+              className={inputClass}
+            />
           </div>
 
 
