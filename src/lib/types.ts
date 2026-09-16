@@ -71,6 +71,28 @@ export interface EcuSoftwareId {
   model_code_id: string
 }
 
+// ── ECU Flash Archive types ──────────────────────────────────
+
+export interface ArchiveFileEntry {
+  name: string
+  path: string
+  size?: number
+}
+
+export interface ArchiveFieldConfig {
+  label: string
+  visible: boolean
+}
+
+export type ArchiveCustomLabels = Record<string, ArchiveFieldConfig>
+
+export const ARCHIVE_LABEL_DEFAULTS: ArchiveCustomLabels = {
+  hardware_id:  { label: 'Hardware ID',            visible: true },
+  ecu_module:   { label: 'عائلة الوحدة / Module', visible: true },
+  car_name:     { label: 'اسم السيارة',            visible: true },
+  engine_size:  { label: 'حجم المحرك',             visible: true },
+}
+
 export interface EcuFlashArchive {
   id: string
   vin: string | null
@@ -78,6 +100,11 @@ export interface EcuFlashArchive {
   hardware_id: string | null
   ecu_module: string | null
   car_name: string | null
+  engine_size: string | null
+  // New JSONB multi-file columns
+  flash_files: ArchiveFileEntry[]
+  images: ArchiveFileEntry[]
+  // Legacy single-file columns (kept for backward-compat)
   flash_file_path: string | null
   flash_file_name: string | null
   image_path: string | null
@@ -86,6 +113,7 @@ export interface EcuFlashArchive {
   created_at: string
   updated_at: string
 }
+
 
 export interface Ecu {
   id: string

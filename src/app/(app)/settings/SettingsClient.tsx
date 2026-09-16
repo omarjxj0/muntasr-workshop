@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Plus, Trash2, ChevronDown, Layers, Factory, GitBranch, Code2, Hash } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Plus, Trash2, ChevronDown, Layers, Factory, GitBranch, Code2, Hash, Cpu, Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
+import type { ArchiveCustomLabels } from '@/lib/types'
+import { ARCHIVE_LABEL_DEFAULTS } from '@/lib/types'
 
 // ─── Shared input / button styles ─────────────────────────────
 const inputCls  = 'flex-1 px-3 py-2 rounded-2xl text-sm transition-all border-2 border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]'
@@ -396,6 +398,123 @@ function HierarchyManager({ initMfr, initFam, initMc, initSwId }: HierarchyProps
   )
 }
 
+// ─── Archive Field Settings ───────────────────────────────────
+
+const FIELD_ORDER = [
+  { key: 'hardware_id',  icon: '🔧' },
+  { key: 'ecu_module',   icon: '🧠' },
+  { key: 'car_name',     icon: '🚗' },
+  { key: 'engine_size',  icon: '⚙️' },
+] as const
+
+function ArchiveFieldSettings({ initial }: { initial: ArchiveCustomLabels }) {
+  const supabase = createClient()
+  const [cfg, setCfg] = useState<ArchiveCustomLabels>({ ...ARCHIVE_LABEL_DEFAULTS, ...initial })
+  const [saving, setSaving] = useState(false)
+
+  const persist = useCallback(async (next: ArchiveCustomLabels) => {
+    setSaving(true)
+    const { error } = await supabase
+      .from('app_settings')
+      .upsert({ key: 'archive_custom_labels', value: JSON.stringify(next), updated_at: new Date().toISOString() })
+    if (error) toast.error('فشل الحفظ: ' + error.message)
+    else toast.success('تم حفظ الإعدادات')
+    setSaving(false)
+  }, [supabase])
+
+  const setLabel = (key: string, label: string) => {
+    const next = { ...cfg, [key]: { ...cfg[key], label } }
+    setCfg(next)
+  }
+
+  const toggleVisible = (key: string) => {
+    const next = { ...cfg, [key]: { ...cfg[key], visible: !cfg[key]?.visible } }
+    setCfg(next)
+    persist(next)
+  }
+
+  const handleLabelBlur = (key: string) => {
+    persist(cfg)
+  }
+
+  return (
+    <div className="soft-card overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center gap-3">
+        <div className="w-8 h-8 rounded-xl bg-violet-50 flex items-center justify-center">
+          <Cpu size={16} className="text-violet-600" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-slate-700 text-sm">إعدادات حقول بنك الملفات</h3>
+          <p className="text-xs text-slate-400">إظهار / إخفاء الحقول وتخصيص تسمياتها في نموذج الإضافة السريع</p>
+        </div>
+        {saving && (
+          <span className="mr-auto text-[11px] text-violet-500 flex items-center gap-1">
+            <span className="w-3 h-3 border border-violet-400 border-t-transparent rounded-full animate-spin" />
+            حفظ...
+          </span>
+        )}
+      </div>
+
+      <div className="divide-y divide-slate-50">
+        {FIELD_ORDER.map(({ key, icon }) => {
+          const field = cfg[key] ?? ARCHIVE_LABEL_DEFAULTS[key]
+          return (
+            <div key={key} className="flex items-center gap-3 px-5 py-3 group">
+              {/* Toggle */}
+              <button
+                type="button"
+                onClick={() => toggleVisible(key)}
+                className={`shrink-0 w-9 h-5 rounded-full transition-colors duration-200 relative ${
+                  field.visible ? 'bg-violet-500' : 'bg-slate-200'
+                }`}
+                title={field.visible ? 'إخفاء الحقل' : 'إظهار الحقل'}
+              >
+                <span
+                  className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${
+                    field.visible ? 'right-0.5' : 'left-0.5'
+                  }`}
+                />
+              </button>
+
+              {/* Icon + default key */}
+              <span className="text-base shrink-0">{icon}</span>
+              <span className="text-xs text-slate-400 font-mono shrink-0 w-24">{key}</span>
+
+              {/* Custom label input */}
+              <input
+                type="text"
+                value={field.label}
+                disabled={!field.visible}
+                onChange={e => setLabel(key, e.target.value)}
+                onBlur={() => handleLabelBlur(key)}
+                className={`flex-1 px-3 py-1.5 rounded-xl border text-sm transition-all focus:outline-none focus:ring-2 focus:ring-violet-400 ${
+                  field.visible
+                    ? 'border-slate-200 bg-white text-slate-800'
+                    : 'border-slate-100 bg-slate-50 text-slate-400 cursor-not-allowed'
+                }`}
+              />
+
+              {/* Visible icon indicator */}
+              <span className="shrink-0">
+                {field.visible
+                  ? <Eye size={14} className="text-violet-400" />
+                  : <EyeOff size={14} className="text-slate-300" />}
+              </span>
+            </div>
+          )
+        })}
+      </div>
+
+      <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/40">
+        <p className="text-[11px] text-slate-400">
+          ⓘ VIN / Barcode، Software ID، وملاحظات دائماً مرئية ولا يمكن إخفاؤها.
+          التغييرات تُطبَّق فوراً عند مغادرة حقل التسمية.
+        </p>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main SettingsClient ───────────────────────────────────────
 
 interface Props {
@@ -405,12 +524,14 @@ interface Props {
   modelCodes:     { id: string; name: string; family_id: string }[]
   softwareIds:    { id: string; name: string; model_code_id: string }[]
   hierarchyReady: boolean
+  archiveLabels:  ArchiveCustomLabels
 }
 
 export default function SettingsClient({
   complaints,
   manufacturers, families, modelCodes, softwareIds,
   hierarchyReady,
+  archiveLabels,
 }: Props) {
   return (
     <div className="space-y-8">
@@ -435,6 +556,22 @@ export default function SettingsClient({
           />
         </section>
       )}
+
+      <hr className="border-slate-100" />
+
+      {/* ── Archive Field Labels ───────────────────────────────── */}
+      <section className="space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-2xl bg-violet-100 flex items-center justify-center">
+            <Cpu size={18} className="text-violet-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">إعدادات حقول وتسميات بنك الملفات</h2>
+            <p className="text-sm text-slate-400">تخصيص تسميات الحقول وإظهار/إخفائها في نموذج الإضافة السريع</p>
+          </div>
+        </div>
+        <ArchiveFieldSettings initial={archiveLabels} />
+      </section>
 
       <hr className="border-slate-100" />
 

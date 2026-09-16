@@ -1,6 +1,8 @@
 import { createClient } from '@/lib/supabase/server'
 import { Settings } from 'lucide-react'
 import SettingsClient from './SettingsClient'
+import { ARCHIVE_LABEL_DEFAULTS } from '@/lib/types'
+import type { ArchiveCustomLabels } from '@/lib/types'
 
 export default async function SettingsPage() {
   const supabase = await createClient()
@@ -12,15 +14,22 @@ export default async function SettingsPage() {
     .order('created_at')
 
   // ── Hierarchy tables (migration 016 — may not exist yet) ─
-  // Fetch independently so a missing table never crashes the page.
-  const [mfrRes, famRes, mcRes, swRes] = await Promise.all([
+  const [mfrRes, famRes, mcRes, swRes, labelsRes] = await Promise.all([
     supabase.from('ecu_manufacturers').select('id,name').order('name'),
     supabase.from('ecu_families').select('id,name,manufacturer_id').order('name'),
     supabase.from('ecu_model_codes').select('id,name,family_id').order('name'),
     supabase.from('ecu_software_ids').select('id,name,model_code_id').order('name'),
+    supabase.from('app_settings').select('value').eq('key', 'archive_custom_labels').maybeSingle(),
   ])
 
   const hierarchyReady = !mfrRes.error && !famRes.error && !mcRes.error && !swRes.error
+
+  // Parse archive field labels (fall back to defaults if not seeded yet)
+  let archiveLabels: ArchiveCustomLabels = { ...ARCHIVE_LABEL_DEFAULTS }
+  if (labelsRes.data?.value) {
+    try { archiveLabels = { ...ARCHIVE_LABEL_DEFAULTS, ...JSON.parse(labelsRes.data.value) } }
+    catch { /* ignore malformed JSON */ }
+  }
 
   return (
     <div className="p-6 md:p-10 max-w-3xl mx-auto space-y-6">
@@ -29,7 +38,6 @@ export default async function SettingsPage() {
         الإعدادات
       </h1>
 
-      {/* Migration notice — shown only when hierarchy tables are missing */}
       {!hierarchyReady && (
         <div className="rounded-2xl border-2 border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 space-y-1">
           <p className="font-bold">⚠️ جداول التصنيف الهرمي غير موجودة</p>
@@ -50,7 +58,9 @@ export default async function SettingsPage() {
         modelCodes={mcRes.data    ?? []}
         softwareIds={swRes.data   ?? []}
         hierarchyReady={hierarchyReady}
+        archiveLabels={archiveLabels}
       />
     </div>
   )
 }
+
