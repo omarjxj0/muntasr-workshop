@@ -14,17 +14,27 @@ export default async function InventoryPage() {
     famRes,
     mcRes,
     swRes,
+    archiveRes,
   ] = await Promise.all([
     supabase.from('ecus').select('*').order('name'),
     supabase.from('ecu_manufacturers').select('id,name').order('name'),
     supabase.from('ecu_families').select('id,name,manufacturer_id').order('name'),
     supabase.from('ecu_model_codes').select('id,name,family_id').order('name'),
     supabase.from('ecu_software_ids').select('id,name,model_code_id').order('name'),
+    // Lightweight: only fetch VINs for the flash badge cross-reference
+    supabase.from('ecu_flash_archive').select('id,vin'),
   ])
 
   if (ecusRes.error) {
     console.warn("Inventory Fetch Error:", ecusRes.error)
   }
+
+  // Build a Set of VINs that have an archive record
+  const flashArchiveVins = new Set<string>(
+    (archiveRes.data ?? [])
+      .map((r: any) => r.vin as string | null)
+      .filter(Boolean) as string[]
+  )
 
   return (
     <div className="p-6 md:p-10 max-w-7xl mx-auto">
@@ -35,7 +45,9 @@ export default async function InventoryPage() {
         modelCodes={mcRes.data ?? []}
         softwareIds={swRes.data ?? []}
         isAdmin={isAdmin}
+        flashArchiveVins={flashArchiveVins}
       />
     </div>
   )
 }
+

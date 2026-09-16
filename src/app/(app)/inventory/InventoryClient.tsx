@@ -3,7 +3,7 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import {
   Package, Plus, AlertTriangle, Search, MapPin, ChevronDown, ChevronUp,
-  Scan, RotateCcw, X, CheckCircle2, Layers, ListFilter, Copy, Pencil,
+  Scan, RotateCcw, X, CheckCircle2, Layers, ListFilter, Copy, Pencil, Zap,
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
@@ -25,6 +25,8 @@ interface InventoryClientProps {
   companies?: { id: string; name: string }[]
   categories?: { id: string; name: string }[]
   isAdmin: boolean
+  /** Set of VINs / barcodes that have a record in ecu_flash_archive */
+  flashArchiveVins?: Set<string>
 }
 
 export interface EcuGroup {
@@ -55,6 +57,7 @@ export default function InventoryClient({
   modelCodes = [],
   softwareIds = [],
   isAdmin,
+  flashArchiveVins = new Set(),
 }: InventoryClientProps) {
   // ── Hierarchy DB data ─────────────────────────────────────
   const [dbMfr, setDbMfr] = useState<MfrRow[]>(manufacturers)
@@ -1080,7 +1083,7 @@ export default function InventoryClient({
                               >
                                 <td className="px-4 py-3 text-slate-400 font-mono">{idx + 1}</td>
                                 <td className="px-4 py-3">
-                                  <div className="flex items-center gap-1.5">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
                                     {ecu.barcode ? (
                                       <button
                                         type="button"
@@ -1108,6 +1111,17 @@ export default function InventoryClient({
                                       <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-100 text-violet-700 border border-violet-200">
                                         مطابقة
                                       </span>
+                                    )}
+                                    {ecu.barcode && flashArchiveVins.has(ecu.barcode) && (
+                                      <Link
+                                        href={`/ecu-archive?search=${encodeURIComponent(ecu.barcode)}`}
+                                        onClick={e => e.stopPropagation()}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/20 text-amber-700 border border-amber-300 hover:bg-amber-400/40 transition-colors"
+                                        title="ملف الفلاش متوفر في بنك الملفات"
+                                      >
+                                        <Zap size={10} className="fill-amber-500 text-amber-500" />
+                                        ملف الفلاش متوفر
+                                      </Link>
                                     )}
                                   </div>
                                 </td>
@@ -1198,6 +1212,17 @@ export default function InventoryClient({
                                   </button>
                                 ) : (
                                   <span className="text-slate-400 text-xs">بدون باركود</span>
+                                )}
+                                {ecu.barcode && flashArchiveVins.has(ecu.barcode) && (
+                                  <Link
+                                    href={`/ecu-archive?search=${encodeURIComponent(ecu.barcode)}`}
+                                    onClick={e => e.stopPropagation()}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-400/20 text-amber-700 border border-amber-300 hover:bg-amber-400/40 transition-colors"
+                                    title="ملف الفلاش متوفر"
+                                  >
+                                    <Zap size={9} className="fill-amber-500 text-amber-500" />
+                                    ملف الفلاش متوفر
+                                  </Link>
                                 )}
                                 {isExact && (
                                   <span className="text-[10px] font-bold bg-violet-600 text-white px-2 py-0.5 rounded-full animate-pulse">

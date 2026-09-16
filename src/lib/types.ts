@@ -71,6 +71,22 @@ export interface EcuSoftwareId {
   model_code_id: string
 }
 
+export interface EcuFlashArchive {
+  id: string
+  vin: string | null
+  software_id: string | null
+  hardware_id: string | null
+  ecu_module: string | null
+  car_name: string | null
+  flash_file_path: string | null
+  flash_file_name: string | null
+  image_path: string | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Ecu {
   id: string
   company_id: string | null
