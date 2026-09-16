@@ -47,7 +47,7 @@ type FormState = {
 const EMPTY_FORM: FormState = {
   name: '', barcode: '',
   symbols_codes: '', shelf_location: '',
-  stock_quantity: 0, min_quantity: 3, purchase_price: 0, selling_price: 0,
+  stock_quantity: 1, min_quantity: 1, purchase_price: 0, selling_price: 0,
   quantity: 1, notes: '',
   manufacturer_id: '', family_id: '', model_code_id: '', software_id_ref: '',
   manufacturerCustom: '', familyCustom: '', modelCodeCustom: '', softwareIdCustom: '',
@@ -70,8 +70,6 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
   // Ref for barcode scanner and name input
   const barcodeRef    = useRef<HTMLInputElement>(null)
   const nameInputRef  = useRef<HTMLInputElement>(null)
-  const bufferRef     = useRef('')
-  const timerRef      = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Load lookup tables ────────────────────────────────────
 
@@ -112,8 +110,8 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
           barcode:        data.barcode         ?? '',
           symbols_codes:  data.symbols_codes   ?? '',
           shelf_location: data.shelf_location  ?? '',
-          stock_quantity: data.stock_quantity  ?? 0,
-          min_quantity:   data.min_quantity    ?? 3,
+          stock_quantity: data.stock_quantity  ?? 1,
+          min_quantity:   data.min_quantity    ?? 1,
           purchase_price: data.purchase_price  ?? 0,
           selling_price:  data.selling_price   ?? 0,
           quantity:       data.quantity        ?? 1,
@@ -137,33 +135,6 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
     return () => clearTimeout(t)
   }, [mode, ecuId]) // eslint-disable-line
 
-  // ── Barcode scanner ───────────────────────────────────────
-
-  useEffect(() => {
-    const handleKeydown = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement
-      const isBarcodeField = target === barcodeRef.current
-      const isOtherInput = (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') && !isBarcodeField
-      if (isOtherInput) return
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        const scanned = bufferRef.current.trim()
-        bufferRef.current = ''
-        if (scanned && scanned.length > 3) {
-          setForm(prev => ({ ...prev, barcode: scanned }))
-          nameInputRef.current?.focus()
-        }
-        return
-      }
-      if (e.key.length === 1) {
-        bufferRef.current += e.key
-        if (timerRef.current) clearTimeout(timerRef.current)
-        timerRef.current = setTimeout(() => { bufferRef.current = '' }, 100)
-      }
-    }
-    window.addEventListener('keydown', handleKeydown)
-    return () => window.removeEventListener('keydown', handleKeydown)
-  }, [])
 
   // ── Cascade derived lists ─────────────────────────────────
 
@@ -217,15 +188,16 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
       barcode:             form.barcode.trim() || null,
       symbols_codes:       form.symbols_codes  || null,
       shelf_location:      form.shelf_location || null,
-      stock_quantity:      form.stock_quantity,
-      min_quantity:        form.min_quantity,
+      stock_quantity:      mode === 'new' ? 1 : (form.stock_quantity ?? 1),
+      min_quantity:        1,
       purchase_price:      form.purchase_price,
       selling_price:       form.selling_price,
-      quantity:            form.quantity,
+      quantity:            1,
       notes:               form.notes         || null,
       manufacturer:        resolvedManufacturer  || null,
       ecu_family:          resolvedFamily        || null,
       vehicle_model_code:  resolvedModelCode     || null,
+      software_id:         resolvedSoftwareId    || null,
     }
 
     const { error } = mode === 'new'
@@ -371,6 +343,7 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
             </label>
             <input
               ref={barcodeRef}
+              type="text"
               value={form.barcode}
               onChange={e => setForm(p => ({ ...p, barcode: e.target.value }))}
               onKeyDown={e => {
@@ -505,12 +478,30 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
           {/* ── Quantities & Prices ── */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div>
-              <label className={labelClass}>الكمية في المخزون</label>
-              <input type="number" min="0" {...field('stock_quantity')} className={inputClass} />
+              <label className={labelClass}>
+                الكمية في المخزون
+                <span className="text-[11px] text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-md mr-1 font-mono font-medium">تلقائي (1)</span>
+              </label>
+              <input
+                type="number"
+                value={form.stock_quantity}
+                readOnly
+                tabIndex={-1}
+                className={`${inputClass} bg-slate-50 text-slate-500 cursor-not-allowed border-dashed`}
+              />
             </div>
             <div>
-              <label className={labelClass}>الحد الأدنى (تنبيه)</label>
-              <input type="number" min="0" {...field('min_quantity')} className={inputClass} />
+              <label className={labelClass}>
+                الحد الأدنى (تنبيه)
+                <span className="text-[11px] text-violet-600 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded-md mr-1 font-mono font-medium">تلقائي (1)</span>
+              </label>
+              <input
+                type="number"
+                value={form.min_quantity}
+                readOnly
+                tabIndex={-1}
+                className={`${inputClass} bg-slate-50 text-slate-500 cursor-not-allowed border-dashed`}
+              />
             </div>
             <div>
               <label className={labelClass}>سعر الشراء (IQD)</label>

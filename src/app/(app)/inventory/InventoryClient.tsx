@@ -296,9 +296,9 @@ export default function InventoryClient({
         !selectedSwName ||
         item.software_id?.trim().toLowerCase() === selectedSwName.trim().toLowerCase()
 
-      const minQty = item.min_quantity ?? 3
-      const isOut = item.stock_quantity === 0
-      const isLow = item.stock_quantity <= minQty
+      const qty = Number(item.stock_quantity ?? item.quantity ?? 1) || 0
+      const isOut = qty === 0
+      const isLow = qty <= 1 && !isOut
 
       const matchesStock =
         stockFilter === 'all' ||
@@ -370,10 +370,13 @@ export default function InventoryClient({
     const result: EcuGroup[] = []
 
     for (const group of groupsMap.values()) {
-      const totalStockQuantity = group.items.reduce((sum, it) => sum + (Number(it.stock_quantity) || 0), 0)
-      const minQty = Math.max(...group.items.map(it => Number(it.min_quantity) || 3))
+      const totalStockQuantity = group.items.reduce(
+        (sum, it) => sum + (Number(it.stock_quantity ?? it.quantity ?? 1) || 0),
+        0
+      )
       const isOutOfStock = totalStockQuantity === 0
-      const hasLowStock = totalStockQuantity > 0 && totalStockQuantity <= minQty
+      const hasLowStock = totalStockQuantity === 1
+      const minQty = 1
 
       // Stock status filter check on aggregated group
       if (stockFilter === 'low' && !hasLowStock) continue
@@ -536,8 +539,8 @@ export default function InventoryClient({
     'px-3 py-2 rounded-xl text-sm transition-all border-2 border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)] w-full'
 
   const getStockBadge = (ecu: any) => {
-    const minQty = ecu.min_quantity ?? 3
-    if (ecu.stock_quantity === 0) {
+    const qty = Number(ecu.stock_quantity ?? ecu.quantity ?? 1) || 0
+    if (qty === 0) {
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-600 border border-rose-200">
           <AlertTriangle size={12} className="text-rose-500" />
@@ -545,20 +548,20 @@ export default function InventoryClient({
         </span>
       )
     }
-    if (ecu.stock_quantity <= minQty) {
+    if (qty <= 1) {
       return (
         <span
           className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200"
-          title={`الحد الأدنى: ${minQty}`}
+          title="تنبيه: متبقي قطعة واحدة فقط أو أقل"
         >
           <AlertTriangle size={12} className="text-amber-500" />
-          نقص ({ecu.stock_quantity})
+          تحذير ({qty})
         </span>
       )
     }
     return (
       <span className="inline-flex items-center justify-center min-w-8 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-50 text-emerald-600 border border-emerald-100">
-        {ecu.stock_quantity}
+        {qty}
       </span>
     )
   }
@@ -996,11 +999,11 @@ export default function InventoryClient({
                           </span>
                         ) : group.hasLowStock ? (
                           <span
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200"
-                            title={`الحد الأدنى للتنبيه: ${group.min_quantity}`}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-50 text-amber-700 border border-amber-200 shadow-xs"
+                            title="تحذير: متبقي قطعة واحدة فقط أو أقل"
                           >
                             <AlertTriangle size={13} className="text-amber-500" />
-                            مخزون منخفض ({group.totalStockQuantity} قطع)
+                            تحذير مخزون منخفض ({group.totalStockQuantity} قطعة)
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-xs">
