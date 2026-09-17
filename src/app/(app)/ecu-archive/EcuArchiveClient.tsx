@@ -5,7 +5,7 @@ import {
   Cpu, Plus, Search, X, Download, Image as ImageIcon, Zap,
   Upload, FileText, Clipboard, CheckCircle2, AlertTriangle,
   Trash2, ChevronDown, ChevronUp, Package, Calendar,
-  HardDrive, Hash, Car, StickyNote, ZoomIn, Gauge,
+  HardDrive, Hash, Car, StickyNote, ZoomIn, Gauge, Tag, Code,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate } from '@/lib/utils'
@@ -25,10 +25,16 @@ interface Props {
   isAdmin: boolean
 }
 
+/** A single key-value pair in extra_data / the extra fields editor */
+interface ExtraField { key: string; value: string }
+
+/** The core identified fields */
 interface FormState {
   rawLog:      string
   vin:         string
   software_id: string
+  part_number: string
+  sw_version:  string
   hardware_id: string
   ecu_module:  string
   car_name:    string
@@ -37,36 +43,94 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  rawLog: '', vin: '', software_id: '', hardware_id: '',
-  ecu_module: '', car_name: '', engine_size: '', notes: '',
+  rawLog: '', vin: '', software_id: '', part_number: '', sw_version: '',
+  hardware_id: '', ecu_module: '', car_name: '', engine_size: '', notes: '',
 }
 
-// ── Regex Parser ───────────────────────────────────────────────────────────
+// ── Parser ─────────────────────────────────────────────────────────────────
+//
+// Strategy:
+//  1. Split the pasted text into "Key: Value" lines.
+//  2. Map known keys to specific FormState fields.
+//  3. Everything else becomes ExtraField rows.
 
-function parseLog(log: string): Partial<FormState> {
-  const extract = (patterns: RegExp[]): string => {
-    for (const re of patterns) {
-      const m = log.match(re)
-      if (m?.[1]?.trim()) return m[1].trim()
+/** Keys that map directly to FormState fields (case-insensitive) */
+const KNOWN_KEY_MAP: Record<string, keyof FormState> = {
+  vin:             'vin',
+  chassis:         'vin',
+  barcode:         'vin',
+  calibration:     'software_id',
+  'sw id':         'software_id',
+  'software id':   'software_id',
+  sw:              'software_id',
+  software:        'software_id',
+  cal:             'software_id',
+  'part number':   'part_number',
+  part:            'part_number',
+  partnumber:      'part_number',
+  'sw version':    'sw_version',
+  swversion:       'sw_version',
+  version:         'sw_version',
+  hardware:        'hardware_id',
+  hw:              'hardware_id',
+  'hardware id':   'hardware_id',
+  hw_version:      'hardware_id',
+  ecu:             'ecu_module',
+  module:          'ecu_module',
+  unit:            'ecu_module',
+  controller:      'ecu_module',
+  'module family': 'ecu_module',
+  vehicle:         'car_name',
+  car:             'car_name',
+  make:            'car_name',
+  model:           'car_name',
+  engine:          'engine_size',
+  displacement:    'engine_size',
+  cc:              'engine_size',
+}
+
+/** Keys we intentionally skip (not useful to surface) */
+const SKIP_KEYS = new Set(['', 'ok', 'done', 'info'])
+
+interface ParseResult {
+  fields: Partial<FormState>
+  extra:  ExtraField[]
+}
+
+function parseLog(log: string): ParseResult {
+  const fields: Partial<FormState> = {}
+  const extra:  ExtraField[] = []
+
+  for (const raw of log.split(/\r?\n/)) {
+    const colonIdx = raw.indexOf(':')
+    if (colonIdx < 1) continue
+    const rawKey = raw.slice(0, colonIdx).trim()
+    const val    = raw.slice(colonIdx + 1).trim()
+    if (!val) continue
+
+    const normalKey = rawKey.toLowerCase().replace(/_/g, ' ')
+    const mapped = KNOWN_KEY_MAP[normalKey]
+
+    if (mapped) {
+      // Only fill if we haven't already found this field
+      if (!fields[mapped]) (fields as any)[mapped] = val
+    } else if (!SKIP_KEYS.has(normalKey)) {
+      // Avoid duplicates
+      if (!extra.some(e => e.key.toLowerCase() === rawKey.toLowerCase())) {
+        extra.push({ key: rawKey, value: val })
+      }
     }
-    return ''
   }
-  return {
-    vin:         extract([/VIN\s*[:\-=]\s*(\S+)/i, /Chassis\s*[:\-=]\s*(\S+)/i, /Barcode\s*[:\-=]\s*(\S+)/i]),
-    software_id: extract([/Calibration\s*[:\-=]\s*(\S+)/i, /SW\s*[:\-=]\s*(\S+)/i, /Software\s*[:\-=]\s*(\S+)/i, /Cal\s*[:\-=]\s*(\S+)/i]),
-    hardware_id: extract([/Hardware\s*[:\-=]\s*(\S+)/i, /HW\s*[:\-=]\s*(\S+)/i, /HW_Version\s*[:\-=]\s*(\S+)/i]),
-    ecu_module:  extract([/Module\s*[:\-=]\s*(.+)/i, /ECU\s*[:\-=]\s*(.+)/i, /Unit\s*[:\-=]\s*(.+)/i, /Controller\s*[:\-=]\s*(.+)/i]),
-    car_name:    extract([/Vehicle\s*[:\-=]\s*(.+)/i, /Car\s*[:\-=]\s*(.+)/i, /Model\s*[:\-=]\s*(.+)/i, /Make\s*[:\-=]\s*(.+)/i]),
-    engine_size: extract([/Engine\s*[:\-=]\s*(.+)/i, /Displacement\s*[:\-=]\s*(\S+)/i, /CC\s*[:\-=]\s*(\S+)/i]),
-  }
+
+  return { fields, extra }
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function formatBytes(b?: number) {
   if (!b) return ''
-  if (b < 1024) return `${b} B`
-  if (b < 1024 * 1024) return `${(b / 1024).toFixed(0)} KB`
+  if (b < 1024)          return `${b} B`
+  if (b < 1024 * 1024)   return `${(b / 1024).toFixed(0)} KB`
   return `${(b / 1024 / 1024).toFixed(1)} MB`
 }
 
@@ -107,13 +171,9 @@ function MetaChip({ icon, label, value }: { icon: React.ReactNode; label: string
 
 // ── Pending-files badge list ───────────────────────────────────────────────
 
-interface PendingFileBadgesProps {
-  files: File[]
-  onRemove: (idx: number) => void
-  color: 'blue' | 'fuchsia'
-}
-
-function PendingFileBadges({ files, onRemove, color }: PendingFileBadgesProps) {
+function PendingFileBadges({
+  files, onRemove, color,
+}: { files: File[]; onRemove: (i: number) => void; color: 'blue' | 'fuchsia' }) {
   if (!files.length) return null
   const cls = color === 'blue'
     ? 'bg-blue-50 text-blue-700 border-blue-200'
@@ -127,12 +187,8 @@ function PendingFileBadges({ files, onRemove, color }: PendingFileBadgesProps) {
         >
           <FileText size={10} />
           <span className="max-w-[160px] truncate">{f.name}</span>
-          {f.size && <span className="opacity-60">({formatBytes(f.size)})</span>}
-          <button
-            type="button"
-            onClick={() => onRemove(i)}
-            className="rounded-full hover:opacity-70 transition-opacity ml-0.5"
-          >
+          {f.size ? <span className="opacity-60">({formatBytes(f.size)})</span> : null}
+          <button type="button" onClick={() => onRemove(i)} className="rounded-full hover:opacity-70 ml-0.5">
             <X size={11} />
           </button>
         </span>
@@ -141,30 +197,37 @@ function PendingFileBadges({ files, onRemove, color }: PendingFileBadgesProps) {
   )
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────
+// ── Input style helper ─────────────────────────────────────────────────────
+
+const fieldCls = 'w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-all'
+const monoFieldCls = fieldCls + ' font-mono'
+
+// ══════════════════════════════════════════════════════════════════════════
+// Main Component
+// ══════════════════════════════════════════════════════════════════════════
 
 export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: Props) {
   const supabase = createClient()
 
   // ── State ────────────────────────────────────────────────────────────────
-  const [records, setRecords] = useState<EcuFlashArchive[]>(initialRecords)
-  const [search, setSearch] = useState('')
-  const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState<FormState>(EMPTY_FORM)
-  const [flashFiles, setFlashFiles] = useState<File[]>([])
-  const [imageFiles, setImageFiles] = useState<File[]>([])
-  const [saving, setSaving] = useState(false)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
-  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [records,      setRecords]      = useState<EcuFlashArchive[]>(initialRecords)
+  const [search,       setSearch]       = useState('')
+  const [showModal,    setShowModal]    = useState(false)
+  const [form,         setForm]         = useState<FormState>(EMPTY_FORM)
+  const [extraFields,  setExtraFields]  = useState<ExtraField[]>([])
+  const [flashFiles,   setFlashFiles]   = useState<File[]>([])
+  const [imageFiles,   setImageFiles]   = useState<File[]>([])
+  const [saving,       setSaving]       = useState(false)
+  const [expandedId,   setExpandedId]   = useState<string | null>(null)
+  const [lightboxUrl,  setLightboxUrl]  = useState<string | null>(null)
+  const [deletingId,   setDeletingId]   = useState<string | null>(null)
   const [localStockMap, setLocalStockMap] = useState(stockMap)
-  const [labels, setLabels] = useState<ArchiveCustomLabels>(ARCHIVE_LABEL_DEFAULTS)
-  const [labelsLoaded, setLabelsLoaded] = useState(false)
+  const [labels,       setLabels]       = useState<ArchiveCustomLabels>(ARCHIVE_LABEL_DEFAULTS)
 
   const flashInputRef = useRef<HTMLInputElement>(null)
   const imageInputRef = useRef<HTMLInputElement>(null)
 
-  // ── Load custom labels from app_settings ──────────────────────────────
+  // ── Load custom labels ────────────────────────────────────────────────
   useEffect(() => {
     supabase
       .from('app_settings')
@@ -173,60 +236,77 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
       .maybeSingle()
       .then(({ data }) => {
         if (data?.value) {
-          try {
-            const parsed = JSON.parse(data.value) as ArchiveCustomLabels
-            setLabels({ ...ARCHIVE_LABEL_DEFAULTS, ...parsed })
-          } catch { /* ignore malformed JSON */ }
+          try { setLabels({ ...ARCHIVE_LABEL_DEFAULTS, ...JSON.parse(data.value) }) }
+          catch { /* ignore */ }
         }
-        setLabelsLoaded(true)
       })
   }, []) // eslint-disable-line
 
   useEffect(() => { setLocalStockMap(stockMap) }, [stockMap])
 
-  // ── Helpers ───────────────────────────────────────────────────────────
   const lbl = (key: string) => labels[key]?.label ?? ARCHIVE_LABEL_DEFAULTS[key]?.label ?? key
   const visible = (key: string) => labels[key]?.visible !== false
 
-  // ── Log Parser ────────────────────────────────────────────────────────
+  // ── Log parser ────────────────────────────────────────────────────────
   const handleLogPaste = useCallback((val: string) => {
-    setForm(prev => {
-      const p = parseLog(val)
-      return {
-        ...prev,
-        rawLog:      val,
-        vin:         p.vin         || prev.vin,
-        software_id: p.software_id || prev.software_id,
-        hardware_id: p.hardware_id || prev.hardware_id,
-        ecu_module:  p.ecu_module  || prev.ecu_module,
-        car_name:    p.car_name    || prev.car_name,
-        engine_size: p.engine_size || prev.engine_size,
-      }
+    const { fields, extra } = parseLog(val)
+    setForm(prev => ({
+      ...prev,
+      rawLog:      val,
+      vin:         fields.vin         || prev.vin,
+      software_id: fields.software_id || prev.software_id,
+      part_number: fields.part_number || prev.part_number,
+      sw_version:  fields.sw_version  || prev.sw_version,
+      hardware_id: fields.hardware_id || prev.hardware_id,
+      ecu_module:  fields.ecu_module  || prev.ecu_module,
+      car_name:    fields.car_name    || prev.car_name,
+      engine_size: fields.engine_size || prev.engine_size,
+    }))
+    // Merge extra fields (append new keys, don't overwrite manual ones)
+    setExtraFields(prev => {
+      const existingKeys = new Set(prev.map(e => e.key.toLowerCase()))
+      const toAdd = extra.filter(e => !existingKeys.has(e.key.toLowerCase()))
+      return [...prev, ...toAdd]
     })
   }, [])
+
+  // ── Extra-data field management ───────────────────────────────────────
+  const addExtraField = () =>
+    setExtraFields(prev => [...prev, { key: '', value: '' }])
+
+  const updateExtra = (idx: number, patch: Partial<ExtraField>) =>
+    setExtraFields(prev => prev.map((f, i) => i === idx ? { ...f, ...patch } : f))
+
+  const removeExtra = (idx: number) =>
+    setExtraFields(prev => prev.filter((_, i) => i !== idx))
+
+  // Build extra_data JSONB object from the rows (skip blank keys)
+  const buildExtraData = () =>
+    Object.fromEntries(
+      extraFields
+        .filter(f => f.key.trim())
+        .map(f => [f.key.trim(), f.value.trim()])
+    )
 
   // ── File selection (multiple, dedup by name) ──────────────────────────
   function mergeFiles(existing: File[], incoming: FileList | null): File[] {
     if (!incoming) return existing
     const names = new Set(existing.map(f => f.name))
     const next = [...existing]
-    Array.from(incoming).forEach(f => {
-      if (!names.has(f.name)) { next.push(f); names.add(f.name) }
-    })
+    Array.from(incoming).forEach(f => { if (!names.has(f.name)) { next.push(f); names.add(f.name) } })
     return next
   }
 
-  const removeFlash = (idx: number) => setFlashFiles(prev => prev.filter((_, i) => i !== idx))
-  const removeImage = (idx: number) => setImageFiles(prev => prev.filter((_, i) => i !== idx))
-
-  // ── Search Filter ─────────────────────────────────────────────────────
+  // ── Search filter ─────────────────────────────────────────────────────
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return records
-    return records.filter(r =>
-      [r.vin, r.software_id, r.hardware_id, r.car_name, r.ecu_module, r.engine_size, r.notes]
+    return records.filter(r => {
+      const extraVals = Object.values(r.extra_data ?? {}).join(' ')
+      return [r.vin, r.software_id, r.hardware_id, r.car_name, r.ecu_module,
+              r.engine_size, r.part_number, r.sw_version, r.notes, extraVals]
         .some(f => f?.toLowerCase().includes(q))
-    )
+    })
   }, [records, search])
 
   // ── Upload helper ─────────────────────────────────────────────────────
@@ -238,88 +318,85 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
     return { name: file.name, path, size: file.size }
   }
 
-  // ── Download handler (signed URL) ─────────────────────────────────────
+  // ── Download (signed URL) ─────────────────────────────────────────────
   async function downloadEntry(entry: ArchiveFileEntry) {
-    const { data, error } = await supabase.storage
-      .from('ecu_vault')
-      .createSignedUrl(entry.path, 120)
+    const { data, error } = await supabase.storage.from('ecu_vault').createSignedUrl(entry.path, 120)
     if (error || !data?.signedUrl) { toast.error('فشل توليد رابط التحميل'); return }
-    const a = document.createElement('a')
-    a.href = data.signedUrl
-    a.download = entry.name
-    a.click()
+    const a = document.createElement('a'); a.href = data.signedUrl; a.download = entry.name; a.click()
   }
 
-  // Legacy single-file download (backward compat)
   async function downloadLegacy(record: EcuFlashArchive) {
     if (!record.flash_file_path) return
-    const { data, error } = await supabase.storage
-      .from('ecu_vault')
-      .createSignedUrl(record.flash_file_path, 60)
+    const { data, error } = await supabase.storage.from('ecu_vault').createSignedUrl(record.flash_file_path, 60)
     if (error || !data?.signedUrl) { toast.error('فشل توليد رابط التحميل'); return }
-    const a = document.createElement('a')
-    a.href = data.signedUrl
-    a.download = record.flash_file_name || 'flash_file'
-    a.click()
+    const a = document.createElement('a'); a.href = data.signedUrl; a.download = record.flash_file_name || 'flash_file'; a.click()
   }
 
-  // ── Image preview (signed URL → lightbox) ─────────────────────────────
+  // ── Image lightbox ────────────────────────────────────────────────────
   async function openImageLightbox(path: string) {
-    const { data, error } = await supabase.storage
-      .from('ecu_vault')
-      .createSignedUrl(path, 120)
+    const { data, error } = await supabase.storage.from('ecu_vault').createSignedUrl(path, 120)
     if (error || !data?.signedUrl) { toast.error('فشل تحميل الصورة'); return }
     setLightboxUrl(data.signedUrl)
   }
 
+  // ── Reset modal ───────────────────────────────────────────────────────
+  function resetModal() {
+    setShowModal(false)
+    setForm(EMPTY_FORM)
+    setExtraFields([])
+    setFlashFiles([])
+    setImageFiles([])
+  }
+
   // ── Save Record ───────────────────────────────────────────────────────
   async function handleSave() {
-    if (!form.vin && !form.software_id && !form.ecu_module) {
-      toast.error('يجب إدخال VIN أو Software ID أو نوع الوحدة على الأقل')
+    if (!form.vin && !form.software_id && !form.part_number && !form.ecu_module) {
+      toast.error('يجب إدخال VIN أو Software ID أو رقم القطعة أو نوع الوحدة على الأقل')
       return
     }
     setSaving(true)
     try {
       const newId = crypto.randomUUID()
 
-      // Upload all flash files in parallel
       const flashEntries: ArchiveFileEntry[] = await Promise.all(
         flashFiles.map(f => uploadFile(f, 'flash', newId))
       )
-
-      // Upload all image files in parallel
       const imageEntries: ArchiveFileEntry[] = await Promise.all(
         imageFiles.map(f => uploadFile(f, 'images', newId))
       )
 
+      const extra_data = buildExtraData()
+
+      const payload = {
+        id:          newId,
+        vin:         form.vin         || null,
+        software_id: form.software_id || null,
+        hardware_id: form.hardware_id || null,
+        ecu_module:  form.ecu_module  || null,
+        car_name:    form.car_name    || null,
+        engine_size: form.engine_size || null,
+        part_number: form.part_number || null,
+        sw_version:  form.sw_version  || null,
+        notes:       form.notes       || null,
+        extra_data,
+        flash_files: flashEntries,
+        images:      imageEntries,
+        // Fill legacy columns from first file for backward-compat
+        flash_file_path: flashEntries[0]?.path ?? null,
+        flash_file_name: flashEntries[0]?.name ?? null,
+        image_path:      imageEntries[0]?.path ?? null,
+      }
+
       const { data, error } = await supabase
         .from('ecu_flash_archive')
-        .insert({
-          id:          newId,
-          vin:         form.vin         || null,
-          software_id: form.software_id || null,
-          hardware_id: form.hardware_id || null,
-          ecu_module:  form.ecu_module  || null,
-          car_name:    form.car_name    || null,
-          engine_size: form.engine_size || null,
-          notes:       form.notes       || null,
-          flash_files: flashEntries,
-          images:      imageEntries,
-          // Also fill legacy columns from first file (for old readers)
-          flash_file_path: flashEntries[0]?.path ?? null,
-          flash_file_name: flashEntries[0]?.name ?? null,
-          image_path:      imageEntries[0]?.path ?? null,
-        })
+        .insert(payload)
         .select()
         .single()
 
       if (error) throw error
 
       setRecords(prev => [data as EcuFlashArchive, ...prev])
-      setShowModal(false)
-      setForm(EMPTY_FORM)
-      setFlashFiles([])
-      setImageFiles([])
+      resetModal()
       toast.success('تم حفظ السجل في بنك الملفات ✓')
     } catch (err: any) {
       console.error(err)
@@ -334,17 +411,15 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
     if (!confirm(`هل تريد حذف هذا السجل بشكل نهائي؟\nVIN: ${record.vin || '—'}`)) return
     setDeletingId(record.id)
     try {
-      const toDelete: string[] = [
+      const toDelete = [
         ...(record.flash_files ?? []).map(f => f.path),
-        ...(record.images ?? []).map(f => f.path),
+        ...(record.images      ?? []).map(f => f.path),
         ...(record.flash_file_path ? [record.flash_file_path] : []),
-        ...(record.image_path ? [record.image_path] : []),
-      ].filter(Boolean)
+        ...(record.image_path      ? [record.image_path]      : []),
+      ]
       if (toDelete.length) await supabase.storage.from('ecu_vault').remove(toDelete)
-
       const { error } = await supabase.from('ecu_flash_archive').delete().eq('id', record.id)
       if (error) throw error
-
       setRecords(prev => prev.filter(r => r.id !== record.id))
       toast.success('تم حذف السجل')
     } catch (err: any) {
@@ -354,16 +429,14 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
     }
   }
 
-  // ── Derived counts for a record ────────────────────────────────────────
+  // ── Derived counts ────────────────────────────────────────────────────
   function flashCount(r: EcuFlashArchive) {
-    const jsonbCount = (r.flash_files ?? []).length
-    if (jsonbCount > 0) return jsonbCount
-    return r.flash_file_path ? 1 : 0
+    const n = (r.flash_files ?? []).length
+    return n > 0 ? n : r.flash_file_path ? 1 : 0
   }
   function imageCount(r: EcuFlashArchive) {
-    const jsonbCount = (r.images ?? []).length
-    if (jsonbCount > 0) return jsonbCount
-    return r.image_path ? 1 : 0
+    const n = (r.images ?? []).length
+    return n > 0 ? n : r.image_path ? 1 : 0
   }
 
   // ── Render ────────────────────────────────────────────────────────────
@@ -373,10 +446,8 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <div
-              className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg"
-              style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}
-            >
+            <div className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-lg"
+              style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}>
               <Cpu size={22} className="text-white" />
             </div>
             <div>
@@ -405,11 +476,9 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
       <div className="relative mb-6">
         <Search size={17} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
         <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="بحث سريع: VIN، Software ID، Hardware ID، اسم السيارة، نوع الوحدة..."
-          className="w-full pr-11 pl-10 py-3.5 rounded-2xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent shadow-sm transition-all"
+          type="text" value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="بحث: VIN، Part Number، SW Version، Software ID، Hardware ID، اسم السيارة..."
+          className="w-full pr-11 pl-10 py-3.5 rounded-2xl border border-slate-200 bg-white text-sm placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-violet-400 shadow-sm transition-all"
         />
         {search && (
           <button onClick={() => setSearch('')} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
@@ -421,23 +490,19 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
       {/* ── Stats Row ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
         {[
-          { label: 'إجمالي السجلات',   value: records.length,                                              color: 'violet' },
-          { label: 'نتائج البحث',       value: filtered.length,                                             color: 'blue'   },
-          { label: 'مع ملف فلاش',       value: records.filter(r => flashCount(r) > 0).length,              color: 'emerald'},
-          { label: 'في المخزون حالياً', value: records.filter(r => r.vin && (localStockMap[r.vin] ?? 0) > 0).length, color: 'amber' },
+          { label: 'إجمالي السجلات',   value: records.length,                                                        color: 'violet'  },
+          { label: 'نتائج البحث',       value: filtered.length,                                                       color: 'blue'    },
+          { label: 'مع ملف فلاش',       value: records.filter(r => flashCount(r) > 0).length,                        color: 'emerald' },
+          { label: 'في المخزون حالياً', value: records.filter(r => r.vin && (localStockMap[r.vin] ?? 0) > 0).length, color: 'amber'   },
         ].map(({ label, value, color }) => (
-          <div key={label} className={cn(
-            'bg-white rounded-2xl border p-4 shadow-sm',
+          <div key={label} className={cn('bg-white rounded-2xl border p-4 shadow-sm',
             color === 'violet'  ? 'border-violet-100'  :
             color === 'blue'    ? 'border-blue-100'    :
-            color === 'emerald' ? 'border-emerald-100' : 'border-amber-100'
-          )}>
-            <div className={cn(
-              'text-2xl font-extrabold',
+            color === 'emerald' ? 'border-emerald-100' : 'border-amber-100')}>
+            <div className={cn('text-2xl font-extrabold',
               color === 'violet'  ? 'text-violet-700'  :
               color === 'blue'    ? 'text-blue-700'    :
-              color === 'emerald' ? 'text-emerald-700' : 'text-amber-700'
-            )}>{value}</div>
+              color === 'emerald' ? 'text-emerald-700' : 'text-amber-700')}>{value}</div>
             <div className="text-xs text-slate-500 mt-0.5">{label}</div>
           </div>
         ))}
@@ -464,39 +529,29 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
             const isExpanded = expandedId === record.id
             const fc = flashCount(record)
             const ic = imageCount(record)
-            // Resolve files for display (prefer JSONB, fall back to legacy)
             const flashList: ArchiveFileEntry[] = (record.flash_files ?? []).length > 0
               ? record.flash_files
-              : record.flash_file_path
-                ? [{ name: record.flash_file_name || 'flash_file', path: record.flash_file_path }]
-                : []
+              : record.flash_file_path ? [{ name: record.flash_file_name || 'flash_file', path: record.flash_file_path }] : []
             const imageList: ArchiveFileEntry[] = (record.images ?? []).length > 0
               ? record.images
-              : record.image_path
-                ? [{ name: 'image', path: record.image_path }]
-                : []
+              : record.image_path ? [{ name: 'image', path: record.image_path }] : []
+            const extraEntries = Object.entries(record.extra_data ?? {})
 
             return (
-              <div
-                key={record.id}
-                className={cn(
-                  'bg-white rounded-2xl border-2 shadow-sm overflow-hidden transition-all duration-200',
-                  isExpanded ? 'border-violet-300 shadow-md' : 'border-slate-100 hover:border-violet-200'
-                )}
-              >
-                {/* ── Card Header ── */}
+              <div key={record.id} className={cn(
+                'bg-white rounded-2xl border-2 shadow-sm overflow-hidden transition-all duration-200',
+                isExpanded ? 'border-violet-300 shadow-md' : 'border-slate-100 hover:border-violet-200'
+              )}>
+                {/* Card Header */}
                 <div
                   className="p-4 sm:p-5 cursor-pointer flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-violet-50/20 transition-colors select-none"
                   onClick={() => setExpandedId(isExpanded ? null : record.id)}
                 >
                   <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <button
-                      type="button"
-                      className={cn(
-                        'mt-0.5 p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-violet-100 hover:text-violet-700 transition-all duration-200 shrink-0',
-                        isExpanded && 'bg-violet-100 text-violet-700'
-                      )}
-                    >
+                    <button type="button" className={cn(
+                      'mt-0.5 p-2 rounded-xl bg-slate-100 text-slate-500 hover:bg-violet-100 hover:text-violet-700 transition-all shrink-0',
+                      isExpanded && 'bg-violet-100 text-violet-700'
+                    )}>
                       {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
 
@@ -516,21 +571,21 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                         )}
                         {record.car_name && (
                           <span className="text-xs text-slate-500 flex items-center gap-1">
-                            <Car size={11} className="text-slate-400" />
-                            {record.car_name}
+                            <Car size={11} className="text-slate-400" />{record.car_name}
                           </span>
                         )}
                         {record.engine_size && visible('engine_size') && (
                           <span className="text-xs text-slate-500 flex items-center gap-1">
-                            <Gauge size={11} className="text-slate-400" />
-                            {record.engine_size}
+                            <Gauge size={11} className="text-slate-400" />{record.engine_size}
                           </span>
                         )}
                       </div>
 
                       <div className="flex flex-wrap gap-x-4 gap-y-1">
-                        <MetaChip icon={<Hash size={11} />}      label="SW" value={record.software_id} />
-                        <MetaChip icon={<HardDrive size={11} />} label="HW" value={record.hardware_id} />
+                        <MetaChip icon={<Hash size={11} />}       label="SW"   value={record.software_id} />
+                        <MetaChip icon={<Tag size={11} />}        label="Part" value={record.part_number} />
+                        <MetaChip icon={<Code size={11} />}       label="Ver"  value={record.sw_version} />
+                        <MetaChip icon={<HardDrive size={11} />}  label="HW"   value={record.hardware_id} />
                         {record.notes && (
                           <div className="flex items-center gap-1.5">
                             <StickyNote size={11} className="text-amber-500 shrink-0" />
@@ -541,7 +596,7 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                     </div>
                   </div>
 
-                  {/* Right: badges + date */}
+                  {/* Right badges */}
                   <div className="flex items-center gap-2 flex-wrap shrink-0 sm:flex-col sm:items-end sm:gap-1.5">
                     <StockBadge vin={record.vin} stockMap={localStockMap} />
                     {fc > 0 && (
@@ -554,30 +609,35 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                         <ImageIcon size={10} /> {ic > 1 ? `${ic} صور` : 'صورة'}
                       </span>
                     )}
+                    {extraEntries.length > 0 && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                        +{extraEntries.length} بيانات
+                      </span>
+                    )}
                     <span className="text-[11px] text-slate-400 flex items-center gap-1">
-                      <Calendar size={10} />
-                      {formatDate(record.created_at)}
+                      <Calendar size={10} />{formatDate(record.created_at)}
                     </span>
                   </div>
                 </div>
 
-                {/* ── Expanded Detail Panel ── */}
+                {/* Expanded Panel */}
                 {isExpanded && (
                   <div className="border-t border-slate-100 bg-slate-50/60 p-4 sm:p-5 space-y-5">
 
-                    {/* Details grid */}
+                    {/* Main fields grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {[
                         { key: 'vin',         label: 'VIN / Barcode',            value: record.vin,         mono: true,  always: true  },
                         { key: 'ecu_module',  label: lbl('ecu_module'),           value: record.ecu_module,  mono: false, always: false },
                         { key: 'software_id', label: 'Software ID / Calibration', value: record.software_id, mono: true,  always: true  },
+                        { key: 'part_number', label: lbl('part_number'),           value: record.part_number, mono: true,  always: false },
+                        { key: 'sw_version',  label: lbl('sw_version'),            value: record.sw_version,  mono: true,  always: false },
                         { key: 'hardware_id', label: lbl('hardware_id'),           value: record.hardware_id, mono: true,  always: false },
                         { key: 'car_name',    label: lbl('car_name'),              value: record.car_name,    mono: false, always: false },
                         { key: 'engine_size', label: lbl('engine_size'),           value: record.engine_size, mono: false, always: false },
                         { key: 'notes',       label: 'ملاحظات',                  value: record.notes,       mono: false, always: true  },
-                      ].filter(({ key, value, always }) =>
-                        value && (always || visible(key))
-                      ).map(({ key, label, value, mono }) => (
+                      ].filter(({ key, value, always }) => value && (always || visible(key)))
+                       .map(({ key, label, value, mono }) => (
                         <div key={key} className="bg-white rounded-xl border border-slate-100 px-4 py-3">
                           <div className="text-[11px] text-slate-400 mb-0.5">{label}</div>
                           <div className={cn('text-sm font-semibold text-slate-800 break-all', mono && 'font-mono')}>{value}</div>
@@ -585,7 +645,25 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                       ))}
                     </div>
 
-                    {/* ── Flash Files Download List ── */}
+                    {/* Extra Data section */}
+                    {extraEntries.length > 0 && (
+                      <div>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                          <Zap size={12} className="text-amber-500" />
+                          بيانات إضافية مستخرجة ({extraEntries.length})
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {extraEntries.map(([k, v]) => (
+                            <div key={k} className="bg-white rounded-xl border border-amber-100 px-4 py-2.5 flex items-baseline gap-2">
+                              <span className="text-[11px] text-amber-600 font-mono font-bold shrink-0">{k}:</span>
+                              <span className="text-xs text-slate-700 break-all">{v}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Flash Files Download List */}
                     {flashList.length > 0 && (
                       <div>
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
@@ -594,23 +672,17 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                         </p>
                         <div className="space-y-2">
                           {flashList.map((entry, i) => (
-                            <div
-                              key={i}
-                              className="flex items-center gap-3 bg-white border border-blue-100 rounded-xl px-4 py-2.5"
-                            >
+                            <div key={i} className="flex items-center gap-3 bg-white border border-blue-100 rounded-xl px-4 py-2.5">
                               <FileText size={15} className="text-blue-500 shrink-0" />
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-semibold text-slate-800 truncate">{entry.name}</p>
-                                {entry.size && (
-                                  <p className="text-[11px] text-slate-400">{formatBytes(entry.size)}</p>
-                                )}
+                                {entry.size && <p className="text-[11px] text-slate-400">{formatBytes(entry.size)}</p>}
                               </div>
                               <button
                                 onClick={() => downloadEntry(entry)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 transition-colors active:scale-95 shrink-0"
                               >
-                                <Download size={12} />
-                                تحميل
+                                <Download size={12} /> تحميل
                               </button>
                             </div>
                           ))}
@@ -618,7 +690,7 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                       </div>
                     )}
 
-                    {/* ── Image Thumbnail Gallery ── */}
+                    {/* Image Thumbnail Gallery */}
                     {imageList.length > 0 && (
                       <div>
                         <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5">
@@ -630,7 +702,7 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                             <button
                               key={i}
                               onClick={() => openImageLightbox(entry.path)}
-                              className="group relative w-24 h-24 rounded-2xl border-2 border-fuchsia-100 bg-fuchsia-50 overflow-hidden hover:border-fuchsia-400 transition-all duration-200 hover:shadow-lg"
+                              className="group relative w-24 h-24 rounded-2xl border-2 border-fuchsia-100 bg-fuchsia-50 overflow-hidden hover:border-fuchsia-400 transition-all hover:shadow-lg"
                               title={entry.name}
                             >
                               <div className="absolute inset-0 flex items-center justify-center">
@@ -646,14 +718,13 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                       </div>
                     )}
 
-                    {/* Legacy single-file download (only if no JSONB data) */}
+                    {/* Legacy single-file fallback */}
                     {flashList.length === 0 && record.flash_file_path && (
                       <button
                         onClick={() => downloadLegacy(record)}
                         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-all active:scale-95"
                       >
-                        <Download size={15} />
-                        تحميل ملف الفلاش
+                        <Download size={15} /> تحميل ملف الفلاش
                         {record.flash_file_name && <span className="font-normal opacity-80 text-xs">({record.flash_file_name})</span>}
                       </button>
                     )}
@@ -664,7 +735,7 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                         <button
                           onClick={() => handleDelete(record)}
                           disabled={deletingId === record.id}
-                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-600 hover:text-white transition-all duration-200 active:scale-95 disabled:opacity-50"
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-600 hover:text-white transition-all active:scale-95 disabled:opacity-50"
                         >
                           <Trash2 size={15} />
                           {deletingId === record.id ? 'جاري الحذف...' : 'حذف السجل'}
@@ -684,21 +755,16 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
          ════════════════════════════════════════════════════════ */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
-            onClick={() => !saving && setShowModal(false)}
-          />
+          <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => !saving && resetModal()} />
           <div
             className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl shadow-2xl bg-white"
             style={{ boxShadow: '0 30px 80px rgba(109,40,217,0.25)' }}
           >
-            {/* Modal Header */}
+            {/* Header */}
             <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-white/95 backdrop-blur-sm rounded-t-3xl">
               <div className="flex items-center gap-3">
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center"
-                  style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}
-                >
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}>
                   <Plus size={18} className="text-white" />
                 </div>
                 <div>
@@ -706,15 +772,13 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                   <p className="text-[11px] text-slate-400">الصق تقرير الـ ID أو أدخل البيانات يدوياً</p>
                 </div>
               </div>
-              <button
-                onClick={() => !saving && setShowModal(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-              >
+              <button onClick={() => !saving && resetModal()} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors">
                 <X size={18} />
               </button>
             </div>
 
             <div className="p-6 space-y-5">
+
               {/* ── Fast Log Parser ── */}
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-2 flex items-center gap-2">
@@ -722,10 +786,20 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                   لصق تقرير الـ ID السريع (PCMflash / KTAG / Scan Tools)
                 </label>
                 <textarea
-                  rows={5}
+                  rows={6}
                   value={form.rawLog}
                   onChange={e => handleLogPaste(e.target.value)}
-                  placeholder={"الصق تقرير الأداة هنا...\nمثال:\nVIN: WBAAA12345678\nCalibration: 8512345\nHardware: 7654321\nModule: Bosch MED17.1\nVehicle: BMW 5 Series 2018"}
+                  placeholder={
+                    "الصق تقرير الأداة هنا (Key: Value)...\n" +
+                    "مثال:\n" +
+                    "VIN: WAUZZZ8U9CR058808\n" +
+                    "Part Number: 03L906018PJ\n" +
+                    "SW Version: 9978\n" +
+                    "Hardware: R4 2.0l TDI CLLB\n" +
+                    "ECU: EDC17C46\n" +
+                    "Protocol: J1962 ISO15765-4\n" +
+                    "ASAM: CAL_Bosch_EDC17C46_CR4"
+                  }
                   className="w-full px-4 py-3 rounded-2xl border border-slate-200 bg-slate-50 text-sm font-mono text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent resize-none transition-all"
                 />
                 {form.rawLog && (
@@ -736,113 +810,173 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                 )}
               </div>
 
-              {/* ── Data Fields ── */}
+              {/* ── Primary Fields ── */}
               <div className="border-t border-dashed border-slate-200 pt-4">
-                <p className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-wide">البيانات المستخرجة / اليدوية</p>
+                <p className="text-xs font-bold text-slate-500 mb-3 uppercase tracking-wide">الحقول الأساسية</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
 
-                  {/* VIN — always visible */}
+                  {/* VIN */}
                   <div>
                     <label className="text-xs font-semibold text-slate-600 mb-1 block">VIN / Barcode *</label>
-                    <input
-                      type="text"
-                      value={form.vin}
+                    <input type="text" value={form.vin}
                       onChange={e => setForm(p => ({ ...p, vin: e.target.value }))}
-                      placeholder="WBAAA12345678..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-mono text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-all"
-                    />
+                      placeholder="WAUZZZ8U9CR058808..."
+                      className={monoFieldCls} />
                   </div>
 
-                  {/* Software ID — always visible */}
-                  <div>
-                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Software ID / Calibration</label>
-                    <input
-                      type="text"
-                      value={form.software_id}
-                      onChange={e => setForm(p => ({ ...p, software_id: e.target.value }))}
-                      placeholder="8512345..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-mono text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-all"
-                    />
-                  </div>
-
-                  {/* Hardware ID — configurable */}
-                  {visible('hardware_id') && (
-                    <div>
-                      <label className="text-xs font-semibold text-slate-600 mb-1 block">{lbl('hardware_id')}</label>
-                      <input
-                        type="text"
-                        value={form.hardware_id}
-                        onChange={e => setForm(p => ({ ...p, hardware_id: e.target.value }))}
-                        placeholder="7654321..."
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-mono text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-all"
-                      />
-                    </div>
-                  )}
-
-                  {/* ECU Module — configurable */}
+                  {/* ECU Module */}
                   {visible('ecu_module') && (
                     <div>
                       <label className="text-xs font-semibold text-slate-600 mb-1 block">{lbl('ecu_module')}</label>
-                      <input
-                        type="text"
-                        value={form.ecu_module}
+                      <input type="text" value={form.ecu_module}
                         onChange={e => setForm(p => ({ ...p, ecu_module: e.target.value }))}
-                        placeholder="Bosch MED17.1..."
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-all"
-                      />
+                        placeholder="EDC17C46 / Bosch MED17..."
+                        className={fieldCls} />
                     </div>
                   )}
 
-                  {/* Car Name — configurable */}
+                  {/* Software ID */}
+                  <div>
+                    <label className="text-xs font-semibold text-slate-600 mb-1 block">Software ID / Calibration</label>
+                    <input type="text" value={form.software_id}
+                      onChange={e => setForm(p => ({ ...p, software_id: e.target.value }))}
+                      placeholder="8512345..."
+                      className={monoFieldCls} />
+                  </div>
+
+                  {/* Part Number */}
+                  {visible('part_number') && (
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">{lbl('part_number')}</label>
+                      <input type="text" value={form.part_number}
+                        onChange={e => setForm(p => ({ ...p, part_number: e.target.value }))}
+                        placeholder="03L906018PJ..."
+                        className={monoFieldCls} />
+                    </div>
+                  )}
+
+                  {/* SW Version */}
+                  {visible('sw_version') && (
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">{lbl('sw_version')}</label>
+                      <input type="text" value={form.sw_version}
+                        onChange={e => setForm(p => ({ ...p, sw_version: e.target.value }))}
+                        placeholder="9978..."
+                        className={monoFieldCls} />
+                    </div>
+                  )}
+
+                  {/* Hardware ID */}
+                  {visible('hardware_id') && (
+                    <div>
+                      <label className="text-xs font-semibold text-slate-600 mb-1 block">{lbl('hardware_id')}</label>
+                      <input type="text" value={form.hardware_id}
+                        onChange={e => setForm(p => ({ ...p, hardware_id: e.target.value }))}
+                        placeholder="R4 2.0l TDI CLLB..."
+                        className={monoFieldCls} />
+                    </div>
+                  )}
+
+                  {/* Car Name */}
                   {visible('car_name') && (
                     <div className={cn(visible('engine_size') ? '' : 'sm:col-span-2')}>
                       <label className="text-xs font-semibold text-slate-600 mb-1 block">{lbl('car_name')}</label>
-                      <input
-                        type="text"
-                        value={form.car_name}
+                      <input type="text" value={form.car_name}
                         onChange={e => setForm(p => ({ ...p, car_name: e.target.value }))}
-                        placeholder="BMW 5 Series 2018..."
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-all"
-                      />
+                        placeholder="Audi A4 2.0 TDI 2012..."
+                        className={fieldCls} />
                     </div>
                   )}
 
-                  {/* Engine Size — configurable */}
+                  {/* Engine Size */}
                   {visible('engine_size') && (
                     <div>
                       <label className="text-xs font-semibold text-slate-600 mb-1 block">{lbl('engine_size')}</label>
-                      <input
-                        type="text"
-                        value={form.engine_size}
+                      <input type="text" value={form.engine_size}
                         onChange={e => setForm(p => ({ ...p, engine_size: e.target.value }))}
                         placeholder="2000cc / 2.0T..."
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-all"
-                      />
+                        className={fieldCls} />
                     </div>
                   )}
 
-                  {/* Notes — always visible */}
+                  {/* Notes */}
                   <div className="sm:col-span-2">
                     <label className="text-xs font-semibold text-slate-600 mb-1 block">
                       <StickyNote size={12} className="inline ml-1 text-amber-500" />
                       ملاحظات (مثال: Immo Off، Stage 1، Stock، Tuned)
                     </label>
-                    <input
-                      type="text"
-                      value={form.notes}
+                    <input type="text" value={form.notes}
                       onChange={e => setForm(p => ({ ...p, notes: e.target.value }))}
                       placeholder="Stock / Immo Off / Stage 1..."
-                      className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 focus:border-transparent transition-all"
-                    />
+                      className={fieldCls} />
                   </div>
                 </div>
+              </div>
+
+              {/* ── Extra Data (dynamic key-value rows) ── */}
+              <div className="border-t border-dashed border-slate-200 pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-bold text-slate-500 uppercase tracking-wide flex items-center gap-1.5">
+                    <Zap size={12} className="text-amber-500" />
+                    بيانات إضافية مستخرجة
+                    {extraFields.length > 0 && (
+                      <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-amber-100 text-amber-700">
+                        {extraFields.length}
+                      </span>
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={addExtraField}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-100 text-slate-600 hover:bg-violet-100 hover:text-violet-700 transition-colors"
+                  >
+                    <Plus size={12} /> إضافة حقل جديد
+                  </button>
+                </div>
+
+                {extraFields.length === 0 ? (
+                  <p className="text-xs text-slate-400 text-center py-3 border border-dashed border-slate-200 rounded-xl">
+                    الحقول الإضافية المُعرَّفة في التقرير ستظهر هنا تلقائياً
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {extraFields.map((ef, i) => (
+                      <div key={i} className="flex gap-2 items-center group">
+                        <input
+                          type="text"
+                          value={ef.key}
+                          onChange={e => updateExtra(i, { key: e.target.value })}
+                          placeholder="اسم الحقل (Key)"
+                          className="w-36 shrink-0 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs font-mono text-amber-700 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-amber-300 transition-all"
+                          dir="ltr"
+                        />
+                        <span className="text-slate-400 text-sm shrink-0">:</span>
+                        <input
+                          type="text"
+                          value={ef.value}
+                          onChange={e => updateExtra(i, { value: e.target.value })}
+                          placeholder="القيمة (Value)"
+                          className="flex-1 px-3 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-700 placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-violet-400 transition-all"
+                          dir="ltr"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => removeExtra(i)}
+                          className="p-1.5 text-slate-300 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-all rounded-lg hover:bg-rose-50 shrink-0"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* ── File Uploads ── */}
               <div className="border-t border-dashed border-slate-200 pt-4 space-y-3">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wide">رفع الملفات إلى ecu_vault</p>
 
-                {/* Flash Files — multiple */}
+                {/* Flash Files */}
                 <div>
                   <div
                     onClick={() => flashInputRef.current?.click()}
@@ -860,19 +994,13 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                         {flashFiles.length > 0 ? `${flashFiles.length} ملف محدد` : '.bin, .hex, .ori, .rar, .zip — يمكن اختيار أكثر من ملف'}
                       </p>
                     </div>
-                    <input
-                      ref={flashInputRef}
-                      type="file"
-                      multiple
-                      accept=".bin,.hex,.ori,.rar,.zip"
-                      className="hidden"
-                      onChange={e => setFlashFiles(prev => mergeFiles(prev, e.target.files))}
-                    />
+                    <input ref={flashInputRef} type="file" multiple accept=".bin,.hex,.ori,.rar,.zip" className="hidden"
+                      onChange={e => setFlashFiles(prev => mergeFiles(prev, e.target.files))} />
                   </div>
-                  <PendingFileBadges files={flashFiles} onRemove={removeFlash} color="blue" />
+                  <PendingFileBadges files={flashFiles} onRemove={i => setFlashFiles(prev => prev.filter((_, j) => j !== i))} color="blue" />
                 </div>
 
-                {/* Image Files — multiple */}
+                {/* Image Files */}
                 <div>
                   <div
                     onClick={() => imageInputRef.current?.click()}
@@ -890,16 +1018,10 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                         {imageFiles.length > 0 ? `${imageFiles.length} صورة محددة` : 'صور لاصقة ECU أو توصيلات Pinout — يمكن اختيار أكثر من صورة'}
                       </p>
                     </div>
-                    <input
-                      ref={imageInputRef}
-                      type="file"
-                      multiple
-                      accept="image/*"
-                      className="hidden"
-                      onChange={e => setImageFiles(prev => mergeFiles(prev, e.target.files))}
-                    />
+                    <input ref={imageInputRef} type="file" multiple accept="image/*" className="hidden"
+                      onChange={e => setImageFiles(prev => mergeFiles(prev, e.target.files))} />
                   </div>
-                  <PendingFileBadges files={imageFiles} onRemove={removeImage} color="fuchsia" />
+                  <PendingFileBadges files={imageFiles} onRemove={i => setImageFiles(prev => prev.filter((_, j) => j !== i))} color="fuchsia" />
                 </div>
               </div>
 
@@ -924,7 +1046,7 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
                   )}
                 </button>
                 <button
-                  onClick={() => !saving && setShowModal(false)}
+                  onClick={() => !saving && resetModal()}
                   disabled={saving}
                   className="px-5 py-3.5 rounded-2xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all duration-200 disabled:opacity-50"
                 >
@@ -942,15 +1064,11 @@ export default function EcuArchiveClient({ initialRecords, stockMap, isAdmin }: 
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm"
           onClick={() => setLightboxUrl(null)}
         >
-          <button
-            className="absolute top-4 right-4 p-2.5 rounded-2xl bg-white/10 text-white hover:bg-white/20 transition-colors"
-            onClick={() => setLightboxUrl(null)}
-          >
+          <button className="absolute top-4 right-4 p-2.5 rounded-2xl bg-white/10 text-white hover:bg-white/20 transition-colors" onClick={() => setLightboxUrl(null)}>
             <X size={20} />
           </button>
           <img
-            src={lightboxUrl}
-            alt="صورة ECU"
+            src={lightboxUrl} alt="صورة ECU"
             className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl object-contain"
             onClick={e => e.stopPropagation()}
           />

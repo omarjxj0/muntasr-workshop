@@ -405,6 +405,8 @@ const FIELD_ORDER = [
   { key: 'ecu_module',   icon: '🧠' },
   { key: 'car_name',     icon: '🚗' },
   { key: 'engine_size',  icon: '⚙️' },
+  { key: 'part_number',  icon: '🏷️' },
+  { key: 'sw_version',   icon: '🔢' },
 ] as const
 
 function ArchiveFieldSettings({ initial }: { initial: ArchiveCustomLabels }) {

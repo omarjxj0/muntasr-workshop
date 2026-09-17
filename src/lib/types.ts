@@ -91,6 +91,8 @@ export const ARCHIVE_LABEL_DEFAULTS: ArchiveCustomLabels = {
   ecu_module:   { label: 'عائلة الوحدة / Module', visible: true },
   car_name:     { label: 'اسم السيارة',            visible: true },
   engine_size:  { label: 'حجم المحرك',             visible: true },
+  part_number:  { label: 'Part Number (رقم القطعة)', visible: true },
+  sw_version:   { label: 'SW Version',             visible: true },
 }
 
 export interface EcuFlashArchive {
@@ -101,6 +103,10 @@ export interface EcuFlashArchive {
   ecu_module: string | null
   car_name: string | null
   engine_size: string | null
+  part_number: string | null
+  sw_version: string | null
+  // Catchall for extra parsed key-value fields
+  extra_data: Record<string, string>
   // New JSONB multi-file columns
   flash_files: ArchiveFileEntry[]
   images: ArchiveFileEntry[]
@@ -113,6 +119,7 @@ export interface EcuFlashArchive {
   created_at: string
   updated_at: string
 }
+
 
 
 export interface Ecu {
