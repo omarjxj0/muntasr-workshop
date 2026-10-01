@@ -122,6 +122,31 @@ export interface EcuFlashArchive {
 
 
 
+// ── Quick Inspections ───────────────────────────────────────
+
+export type InspectionType = 'car' | 'ecu'
+
+export interface ImageEntry {
+  name: string
+  path: string
+  size?: number
+}
+
+export interface QuickInspection {
+  id: string
+  type: InspectionType
+  customer_name: string
+  phone: string | null
+  subject: string | null        // car model or ECU type
+  fault_codes: string | null
+  image_paths: ImageEntry[]
+  inspection_fee: number
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Ecu {
   id: string
   company_id: string | null
@@ -215,10 +240,11 @@ export type Database = {
       ecu_families:      { Row: EcuFamily;       Insert: Omit<EcuFamily, 'id'>;       Update: Partial<Omit<EcuFamily, 'id'>> }
       ecu_model_codes:   { Row: EcuModelCode;    Insert: Omit<EcuModelCode, 'id'>;    Update: Partial<Omit<EcuModelCode, 'id'>> }
       ecu_software_ids:  { Row: EcuSoftwareId;   Insert: Omit<EcuSoftwareId, 'id'>;   Update: Partial<Omit<EcuSoftwareId, 'id'>> }
-      used_parts:      { Row: UsedPart;    Insert: Omit<UsedPart, 'id'>;     Update: Partial<Omit<UsedPart, 'id'>> }
-      employees:       { Row: Employee;    Insert: Omit<Employee, 'id'>;     Update: Partial<Omit<Employee, 'id'>> }
-      daily_wages:     { Row: DailyWage;   Insert: Omit<DailyWage, 'id'>;   Update: Partial<Omit<DailyWage, 'id'>> }
-      transactions:    { Row: Transaction; Insert: Omit<Transaction, 'id'>; Update: Partial<Omit<Transaction, 'id'>> }
+      used_parts:         { Row: UsedPart;        Insert: Omit<UsedPart, 'id'>;          Update: Partial<Omit<UsedPart, 'id'>> }
+      employees:          { Row: Employee;        Insert: Omit<Employee, 'id'>;          Update: Partial<Omit<Employee, 'id'>> }
+      daily_wages:        { Row: DailyWage;       Insert: Omit<DailyWage, 'id'>;        Update: Partial<Omit<DailyWage, 'id'>> }
+      transactions:       { Row: Transaction;     Insert: Omit<Transaction, 'id'>;      Update: Partial<Omit<Transaction, 'id'>> }
+      quick_inspections:  { Row: QuickInspection; Insert: Omit<QuickInspection, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Omit<QuickInspection, 'id'>> }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

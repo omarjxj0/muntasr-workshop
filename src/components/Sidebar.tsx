@@ -6,7 +6,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import {
   LayoutDashboard, Car, Package, Users, Wallet, Settings,
-  LogOut, Menu, X, CalendarDays, UserCheck, MessageSquare, TrendingUp, Cpu
+  LogOut, Menu, X, CalendarDays, UserCheck, MessageSquare, TrendingUp, Cpu, Stethoscope
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/lib/types'
@@ -33,6 +33,7 @@ const navItems: NavItem[] = [
   { href: '/visits',            label: 'الزيارات',          icon: <Car size={20} /> },
   { href: '/inventory',         label: 'المخزون (ECU)',     icon: <Package size={20} /> },
   { href: '/ecu-archive',       label: 'بنك ملفات العقول', icon: <Cpu size={20} /> },
+  { href: '/inspections',       label: 'الفحوصات السريعة',  icon: <Stethoscope size={20} /> },
   { href: '/marketing',         label: 'التسويق الإلكتروني', icon: <MessageSquare size={20} />, adminOnly: true },
   { href: '/employees',         label: 'الموظفون',          icon: <Users size={20} />,       adminOnly: true },
   { href: '/employees/wages',   label: 'الرواتب اليومية',  icon: <CalendarDays size={20} />, adminOnly: true },
