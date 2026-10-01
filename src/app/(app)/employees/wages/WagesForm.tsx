@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Save, CalendarDays } from 'lucide-react'
-import { formatCurrency, parseArabicNumerals, handleFinancialBlur } from '@/lib/utils'
+import { formatCurrency, parseArabicNumerals, parseAmount } from '@/lib/utils'
 import type { Employee } from '@/lib/types'
 import toast from 'react-hot-toast'
 
@@ -108,7 +108,7 @@ export default function WagesForm({ employees }: Props) {
                         inputMode="numeric"
                         value={wages[emp.id] || ''}
                         onChange={e => setWages(p => ({ ...p, [emp.id]: Number(parseArabicNumerals(e.target.value)) || 0 }))}
-                        onBlur={e => setWages(p => ({ ...p, [emp.id]: handleFinancialBlur(e.target.value) || 0 }))}
+                        onBlur={e => setWages(p => ({ ...p, [emp.id]: parseAmount(e.target.value) }))}
                         placeholder="0"
                         className="w-40 px-4 py-2 rounded-2xl text-sm font-mono transition-all border-2 border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
                         lang="en"

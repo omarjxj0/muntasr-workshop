@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { parseArabicNumerals, handleFinancialBlur } from '@/lib/utils'
+import { parseArabicNumerals, parseAmount } from '@/lib/utils'
 import { Package, ArrowRight, Scan, MapPin, ChevronDown, FileText, Loader2, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -190,8 +190,8 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
       shelf_location:      form.shelf_location || null,
       stock_quantity:      mode === 'new' ? 1 : (form.stock_quantity ?? 1),
       min_quantity:        1,
-      purchase_price:      form.purchase_price,
-      selling_price:       form.selling_price,
+      purchase_price:      parseAmount(form.purchase_price),
+      selling_price:       parseAmount(form.selling_price),
       quantity:            1,
       notes:               form.notes         || null,
       manufacturer:        resolvedManufacturer  || null,
@@ -221,7 +221,7 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
     onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
       setForm(p => ({ ...p, [key]: Number(parseArabicNumerals(e.target.value)) || 0 })),
     onBlur: (e: React.FocusEvent<HTMLInputElement>) =>
-      setForm(p => ({ ...p, [key]: handleFinancialBlur(e.target.value) || 0 })),
+      setForm(p => ({ ...p, [key]: parseAmount(e.target.value) })),
   })
 
   const inputClass  = "w-full px-4 py-3 rounded-2xl text-sm transition-all border-2 border-slate-200 bg-white text-slate-700 placeholder-slate-400 focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]"
@@ -506,10 +506,34 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
             <div>
               <label className={labelClass}>سعر الشراء (IQD)</label>
               <input type="text" inputMode="numeric" {...numericField('purchase_price')} className={inputClass} lang="en" dir="ltr" />
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {[25000, 50000, 100000].map(inc => (
+                  <button
+                    key={inc}
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, purchase_price: (Number(p.purchase_price) || 0) + inc }))}
+                    className="px-2 py-0.5 text-[11px] font-semibold rounded-lg bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
+                  >
+                    +{inc.toLocaleString('en-US')}
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
               <label className={labelClass}>سعر البيع (IQD)</label>
               <input type="text" inputMode="numeric" {...numericField('selling_price')} className={inputClass} lang="en" dir="ltr" />
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {[25000, 50000, 100000].map(inc => (
+                  <button
+                    key={inc}
+                    type="button"
+                    onClick={() => setForm(p => ({ ...p, selling_price: (Number(p.selling_price) || 0) + inc }))}
+                    className="px-2 py-0.5 text-[11px] font-semibold rounded-lg bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
+                  >
+                    +{inc.toLocaleString('en-US')}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

@@ -11,26 +11,23 @@ interface DashboardAnalyticsProps {
   income: number
   wages: number
   expenses: number
+  ecuCosts?: number
   topVehicleMakes: { name: string; count: number }[]
 }
 
-const COLORS = ['#10b981', '#f43f5e', '#f59e0b'] // Emerald (Income), Rose (Expenses), Amber (Wages)
-
-export default function DashboardAnalytics({ income, wages, expenses, topVehicleMakes }: DashboardAnalyticsProps) {
+export default function DashboardAnalytics({ income, wages, expenses, ecuCosts = 0, topVehicleMakes }: DashboardAnalyticsProps) {
   
   const financialData = useMemo(() => {
-    // Only show expenses in the pie if we want a breakdown of OUTFLOWS, 
-    // or we can show a pie of Income vs Total Expenses (Wages + Expenses)
-    // Actually, a pie showing the ratio of Profit vs Outflows is great.
-    const totalOutflows = wages + expenses
+    const totalOutflows = wages + expenses + ecuCosts
     const profit = Math.max(0, income - totalOutflows)
     
     return [
       { name: 'صافي الربح', value: profit, color: '#10b981' }, // Emerald
       { name: 'رواتب وأجور', value: wages, color: '#f59e0b' }, // Amber
-      { name: 'مصروفات أخرى', value: expenses, color: '#f43f5e' }, // Rose
+      { name: 'تكلفة العقول والمخزون', value: ecuCosts, color: '#6366f1' }, // Indigo
+      { name: 'مصروفات تشغيلية', value: expenses, color: '#f43f5e' }, // Rose
     ].filter(d => d.value > 0)
-  }, [income, wages, expenses])
+  }, [income, wages, expenses, ecuCosts])
 
   return (
     <div className="grid lg:grid-cols-2 gap-6">

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Plus } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { parseArabicNumerals, handleFinancialBlur } from '@/lib/utils'
+import { parseArabicNumerals, parseAmount } from '@/lib/utils'
 import { useRouter } from 'next/navigation'
 import toast from 'react-hot-toast'
 
@@ -20,7 +20,7 @@ export default function AddTransactionForm() {
     setLoading(true)
     const { error } = await supabase.from('transactions').insert({
       type: form.type as 'Income' | 'Expense',
-      amount: Number(form.amount),
+      amount: parseAmount(form.amount),
       reference_type: 'Other',
       description: form.description || null,
     } as any)
@@ -69,7 +69,7 @@ export default function AddTransactionForm() {
             inputMode="numeric"
             value={form.amount}
             onChange={e => setForm(p => ({ ...p, amount: parseArabicNumerals(e.target.value) }))}
-            onBlur={e => setForm(p => ({ ...p, amount: handleFinancialBlur(e.target.value).toString() }))}
+            onBlur={e => setForm(p => ({ ...p, amount: parseAmount(e.target.value).toString() }))}
             className={`${inputClass} font-mono`}
             lang="en"
             dir="ltr"

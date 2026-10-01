@@ -8,7 +8,7 @@ import StatusBadge from '@/components/StatusBadge'
 import {
   Car, Phone, Trash2, DollarSign, FileText, ArrowRight, Scan, Package, Lock
 } from 'lucide-react'
-import { formatDate, formatCurrency, VISIT_STATUS_LABELS, parseArabicNumerals, handleFinancialBlur } from '@/lib/utils'
+import { formatDate, formatCurrency, VISIT_STATUS_LABELS, parseArabicNumerals, parseAmount } from '@/lib/utils'
 import type { VisitStatus, UserRole } from '@/lib/types'
 import toast from 'react-hot-toast'
 import VoiceComplaintField from './VoiceComplaintField'
@@ -97,7 +97,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
 
   const handleLaborCostBlur = async () => {
     if (isLocked) return
-    const finalVal = handleFinancialBlur(laborCostInput)
+    const finalVal = parseAmount(laborCostInput)
     setLaborCostInput(finalVal.toString())
     const { error } = await supabase.from('visits').update({ labor_cost: finalVal } as any).eq('id', visitId)
     if (error) toast.error('فشل حفظ أجرة العمل')
@@ -118,7 +118,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
 
   const handleCollectPayment = async () => {
     if (!visit || isLocked) return
-    const currentLabor = handleFinancialBlur(laborCostInput) || Number(visit.labor_cost) || 0
+    const currentLabor = parseAmount(laborCostInput) || Number(visit.labor_cost) || 0
     const grandTotal = (Number(visit.total_amount) || 0) + currentLabor
     
     if (grandTotal <= 0) { toast.error('لا يوجد مبلغ للتحصيل'); return }
@@ -159,7 +159,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
     const customerName = customer.name || 'عزيزي العميل'
     const vehicleMake = vehicle?.make_and_model || 'سيارتك'
     const vehiclePlate = vehicle?.license_plate || ''
-    const currentLabor = handleFinancialBlur(laborCostInput) || Number(visit.labor_cost) || 0
+    const currentLabor = parseAmount(laborCostInput) || Number(visit.labor_cost) || 0
     const grandTotal = (Number(visit.total_amount) || 0) + currentLabor
     const formattedTotal = new Intl.NumberFormat('en-US').format(grandTotal)
 

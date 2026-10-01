@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react'
 import { TrendingUp, Plus, Trash2, Calendar, FileText } from 'lucide-react'
-import { formatCurrency } from '@/lib/utils'
+import { formatCurrency, parseAmount, parseArabicNumerals } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 
@@ -26,17 +26,10 @@ export default function ExpensesClient({ initialExpenses }: { initialExpenses: E
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('أخرى')
 
-  // Smart Thousands Shortcut
-  const handleAmountBlur = () => {
-    const val = Number(amount)
-    if (val > 0 && val < 10000) {
-      setAmount((val * 1000).toString())
-    }
-  }
-
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!amount || Number(amount) <= 0 || !description.trim()) {
+    const parsedAmount = parseAmount(amount)
+    if (parsedAmount <= 0 || !description.trim()) {
       toast.error('يرجى إدخال مبلغ صحيح ووصف للمصروف')
       return
     }
@@ -45,7 +38,7 @@ export default function ExpensesClient({ initialExpenses }: { initialExpenses: E
     const { data, error } = await supabase
       .from('expenses')
       .insert({
-        amount: Number(amount),
+        amount: parsedAmount,
         description: description.trim(),
         category,
       })
@@ -124,13 +117,31 @@ export default function ExpensesClient({ initialExpenses }: { initialExpenses: E
                 type="number"
                 value={amount}
                 onChange={e => setAmount(e.target.value)}
-                onBlur={handleAmountBlur}
                 className={`w-full font-mono text-lg ${inputClass}`}
                 placeholder="0"
                 dir="ltr"
                 required
               />
-              <p className="text-[10px] text-slate-400 mt-1">اختصار: أدخل 25 وسيتم تحويلها إلى 25,000</p>
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {[5000, 10000, 25000, 50000].map(inc => (
+                  <button
+                    key={inc}
+                    type="button"
+                    onClick={() => setAmount(prev => String((Number(prev) || 0) + inc))}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors"
+                  >
+                    +{inc.toLocaleString('en-US')}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setAmount('')}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors"
+                >
+                  تصفير
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-1">أدخل المبلغ كاملاً بالدينار العراقي (IQD)</p>
             </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">التصنيف</label>

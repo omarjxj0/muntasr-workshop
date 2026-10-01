@@ -7,12 +7,14 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Format currency in Iraqi Dinar (IQD)
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', {
+export function formatCurrency(amount: number | string): string {
+  const num = typeof amount === 'string' ? parseAmount(amount) : Number(amount) || 0
+  const safe = Object.is(num, -0) ? 0 : Math.round(num)
+  return new Intl.NumberFormat('ar-IQ', {
     style: 'currency',
     currency: 'IQD',
     maximumFractionDigits: 0,
-  }).format(amount)
+  }).format(safe)
 }
 
 // Replaces Eastern Arabic numerals (٠-٩) with standard digits (0-9)
@@ -21,14 +23,26 @@ export function parseArabicNumerals(val: string | number): string {
   return val.toString().replace(/[٠-٩]/g, (d: string) => '٠١٢٣٤٥٦٧٨٩'.indexOf(d).toString())
 }
 
-// Global handler for financial inputs
-export function handleFinancialBlur(val: string | number): number {
-  const numeric = parseFloat(parseArabicNumerals(val));
-  if (isNaN(numeric)) return 0;
-  if (numeric > 0 && numeric < 10000) {
-    return numeric * 1000;
+// Strict numeric parse — always use this before saving to Supabase or calculating totals
+export function parseAmount(val: string | number | null | undefined): number {
+  if (val == null) return 0
+  if (typeof val === 'number') {
+    return isNaN(val) || !isFinite(val) ? 0 : (Object.is(val, -0) ? 0 : val)
   }
-  return numeric;
+  const cleaned = parseArabicNumerals(val).replace(/,/g, '').trim()
+  const n = parseFloat(cleaned)
+  return isNaN(n) || !isFinite(n) || n < 0 ? 0 : (Object.is(n, -0) ? 0 : n)
+}
+
+// Global handler for financial inputs on blur
+// No implicit multipliers — stores exactly what the user typed.
+export function handleFinancialBlur(val: string | number): number {
+  return parseAmount(val)
+}
+
+// Format a number as Iraqi Dinar for display only
+export function formatAmount(amount: number | string): string {
+  return formatCurrency(amount)
 }
 
 // Format a date/timestamp to readable Arabic locale

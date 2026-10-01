@@ -30,18 +30,33 @@ export default async function DashboardPage() {
     { data: incomeTransactions },
     { data: wages },
     { data: expensesData },
-    { data: visitsWithVehicles }
+    { data: visitsWithVehicles },
+    { data: inspectionFees },
+    { data: ecuPurchaseCosts },
   ] = await Promise.all([
     supabase.from('transactions').select('amount').eq('type', 'Income'),
     supabase.from('daily_wages').select('amount'),
     supabase.from('expenses').select('amount'),
-    supabase.from('visits').select('id, vehicles(make_and_model)')
+    supabase.from('visits').select('id, vehicles(make_and_model)'),
+    supabase.from('quick_inspections').select('inspection_fee'),
+    supabase.from('ecus').select('purchase_price, stock_quantity'),
   ])
 
-  const totalIncome = (incomeTransactions || []).reduce((sum, t) => sum + Number(t.amount), 0)
-  const totalWages = (wages || []).reduce((sum, w) => sum + Number(w.amount), 0)
-  const totalExpenses = (expensesData || []).reduce((sum, e) => sum + Number(e.amount), 0)
-  const netProfit = totalIncome - totalWages - totalExpenses
+  // Revenue: income transactions + quick inspection fees
+  const totalTransactionIncome = (incomeTransactions || []).reduce((sum, t) => sum + (Number(t.amount) || 0), 0)
+  const totalInspectionFees    = (inspectionFees    || []).reduce((sum, r) => sum + (Number(r.inspection_fee) || 0), 0)
+  const totalIncome = totalTransactionIncome + totalInspectionFees
+
+  // Expenses: wages + operational expenses + ECU purchase costs (cost of inventory)
+  const totalWages    = (wages        || []).reduce((sum, w) => sum + (Number(w.amount) || 0), 0)
+  const totalExpenses = (expensesData || []).reduce((sum, e) => sum + (Number(e.amount) || 0), 0)
+  const totalEcuCosts = (ecuPurchaseCosts || []).reduce(
+    (sum, e) => sum + ((Number(e.purchase_price) || 0) * (Number(e.stock_quantity) || 0)),
+    0
+  )
+
+  // Net Profit = Total Revenue - Total Expenses
+  const netProfit = totalIncome - totalWages - totalExpenses - totalEcuCosts
 
   // Top vehicles
   const vehicleCounts: Record<string, number> = {}
@@ -174,6 +189,7 @@ export default async function DashboardPage() {
           income={totalIncome}
           wages={totalWages}
           expenses={totalExpenses}
+          ecuCosts={totalEcuCosts}
           topVehicleMakes={topVehicleMakes}
         />
       )}
