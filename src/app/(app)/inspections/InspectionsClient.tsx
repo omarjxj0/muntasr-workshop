@@ -263,30 +263,241 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
     } finally { setDeletingId(null) }
   }
 
-  function handlePrint(record: QuickInspection) {
-    const typeLabel = record.type === 'car' ? 'فحص سيارة' : 'فحص عقل ECU'
-    const win = window.open('', '_blank', 'width=600,height=800')
-    if (!win) return
+  async function handlePrint(record: QuickInspection) {
+    const typeLabel = (record.type || 'car') === 'car' ? 'فحص سيارة' : 'فحص عقل ECU'
+    const win = window.open('', '_blank', 'width=750,height=900')
+    if (!win) {
+      toast.error('يرجى السماح بالنوافذ المنبثقة لطباعة التقرير')
+      return
+    }
+
+    win.document.write(`<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>جاري تحضير التقرير...</title></head><body style="font-family:sans-serif;text-align:center;padding:60px 20px;color:#64748b;direction:rtl;"><h3>جاري تجهيز تقرير الفحص للطباعة...</h3><p>يرجى الانتظار ثوانٍ معدودة لتحميل الصور والبيانات</p></body></html>`)
+
+    // Resolve images
+    const rawImages = normalizeImagePaths(record.image_paths)
+    const resolvedImages = await Promise.all(
+      rawImages.map(async img => {
+        let url = img.path
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+          const { data } = supabase.storage.from(BUCKET).getPublicUrl(url)
+          if (data?.publicUrl) url = data.publicUrl
+        }
+        return { name: img.name, url }
+      })
+    )
+
     const rows: [string, string][] = []
-    rows.push(['اسم الزبون', record.customer_name])
+    rows.push(['اسم الزبون', record.customer_name || '—'])
     if (record.phone) rows.push(['رقم الهاتف', record.phone])
-    if (record.subject) rows.push([record.type === 'car' ? 'نوع السيارة' : 'نوع العقل', record.subject])
-    if (record.fault_codes) rows.push(['رموز الأعطال', '<pre style="font-size:12px;margin:0;white-space:pre-wrap">' + record.fault_codes + '</pre>'])
+    if (record.subject) rows.push([(record.type || 'car') === 'car' ? 'نوع السيارة / الموديل' : 'نوع العقل / السيارة', record.subject])
+    if (record.fault_codes) rows.push(['رموز وتفاصيل الأعطال', '<pre style="font-size:12px;margin:0;white-space:pre-wrap;font-family:monospace;background:#fef2f2;padding:8px 12px;border-radius:8px;border:1px solid #fee2e2;color:#991b1b">' + record.fault_codes + '</pre>'])
     rows.push(['أجور الفحص', formatCurrency(record.inspection_fee)])
-    if (record.notes) rows.push(['ملاحظات', record.notes])
+    if (record.notes) rows.push(['ملاحظات الفحص', record.notes])
     const tableRows = rows.map(([k, v]) => '<tr><td>' + k + '</td><td>' + v + '</td></tr>').join('')
-    win.document.write('<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>تقرير</title>'
-      + '<style>body{font-family:Segoe UI,sans-serif;padding:32px;color:#1e293b;direction:rtl}'
-      + 'table{width:100%;border-collapse:collapse}td{padding:8px 12px;border-bottom:1px solid #e2e8f0;font-size:13px}'
-      + 'td:first-child{font-weight:600;color:#475569;width:35%}'
-      + '.footer{margin-top:24px;font-size:11px;color:#94a3b8;text-align:center;border-top:1px solid #e2e8f0;padding-top:12px}'
-      + '</style></head><body>'
-      + '<h2>تقرير الفحص السريع — ' + typeLabel + '</h2>'
-      + '<p style="color:#64748b;margin-bottom:16px">' + formatDate(record.created_at) + '</p>'
-      + '<table>' + tableRows + '</table>'
-      + '<div class="footer">ورشة منتصر لكهرباء السيارات</div>'
-      + '</body></html>')
-    win.document.close(); win.print()
+
+    const imagesHtml = resolvedImages.length > 0 ? `
+      <div class="images-section">
+        <h3 class="images-title">صور الفحص والأعطال المرفقة (${resolvedImages.length})</h3>
+        <div class="images-grid">
+          ${resolvedImages.map(img => `
+            <div class="image-card">
+              <img src="${img.url}" alt="${img.name}" />
+              ${img.name ? `<div class="image-caption">${img.name}</div>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    ` : ''
+
+    win.document.open()
+    win.document.write(`<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="utf-8">
+  <title>تقرير فحص — ${record.customer_name || 'زبون'}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      padding: 36px 40px;
+      color: #1e293b;
+      direction: rtl;
+      background: #fff;
+      margin: 0;
+      line-height: 1.5;
+    }
+    .header {
+      border-bottom: 2px solid #0d9488;
+      padding-bottom: 14px;
+      margin-bottom: 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .header h2 {
+      margin: 0;
+      color: #0f766e;
+      font-size: 22px;
+      font-weight: 800;
+    }
+    .header .subtitle {
+      color: #64748b;
+      font-size: 13px;
+      margin-top: 4px;
+    }
+    .header .tag {
+      background: #ccfbf1;
+      color: #0f766e;
+      font-weight: bold;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 12px;
+      border: 1px solid #99f6e4;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 13px;
+      vertical-align: top;
+    }
+    td:first-child {
+      font-weight: bold;
+      color: #475569;
+      width: 28%;
+      background-color: #f8fafc;
+      border-left: 1px solid #e2e8f0;
+    }
+    .images-section {
+      margin-top: 26px;
+      margin-bottom: 24px;
+      page-break-inside: avoid;
+    }
+    .images-title {
+      font-size: 15px;
+      font-weight: bold;
+      color: #0f766e;
+      border-bottom: 1.5px solid #ccfbf1;
+      padding-bottom: 6px;
+      margin-bottom: 14px;
+    }
+    .images-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    .image-card {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #f8fafc;
+      text-align: center;
+      page-break-inside: avoid;
+      break-inside: avoid;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .image-card img {
+      max-width: 100%;
+      max-height: 260px;
+      object-fit: contain;
+      border-radius: 8px;
+      display: block;
+      margin: 0 auto;
+      border: 1px solid #e2e8f0;
+      background: #fff;
+    }
+    .image-caption {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #64748b;
+      word-break: break-all;
+      font-weight: 500;
+    }
+    .footer {
+      margin-top: 32px;
+      font-size: 12px;
+      color: #94a3b8;
+      text-align: center;
+      border-top: 1px solid #e2e8f0;
+      padding-top: 14px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    @media print {
+      body {
+        padding: 16px 20px;
+      }
+      img {
+        max-width: 100%;
+        page-break-inside: avoid;
+      }
+      .images-section, .image-card {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      @page {
+        size: A4;
+        margin: 12mm;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <h2>تقرير الفحص السريع الإلكتروني</h2>
+      <div class="subtitle">ورشة منتصر لكهرباء وبرمجة السيارات الحديثة · ${formatDate(record.created_at)}</div>
+    </div>
+    <div class="tag">${typeLabel}</div>
+  </div>
+
+  <table>
+    ${tableRows}
+  </table>
+
+  ${imagesHtml}
+
+  <div class="footer">
+    <span>ورشة منتصر — تشخيص وبرمجة عقول وكهرباء السيارات</span>
+    <span>تاريخ الطباعة: ${new Date().toLocaleDateString('ar-IQ')}</span>
+  </div>
+
+  <script>
+    window.addEventListener('load', function() {
+      var imgs = document.querySelectorAll('img');
+      if (imgs.length === 0) {
+        window.print();
+        return;
+      }
+      var loaded = 0;
+      function checkAndPrint() {
+        loaded++;
+        if (loaded >= imgs.length) {
+          setTimeout(function() { window.print(); }, 250);
+        }
+      }
+      for (var i = 0; i < imgs.length; i++) {
+        if (imgs[i].complete) {
+          checkAndPrint();
+        } else {
+          imgs[i].onload = checkAndPrint;
+          imgs[i].onerror = checkAndPrint;
+        }
+      }
+    });
+  </script>
+</body>
+</html>`)
+    win.document.close()
   }
 
   const totalFees = records.reduce((s, r) => s + (r.inspection_fee || 0), 0)
