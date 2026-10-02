@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo, useRef, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Stethoscope, Plus, Search, X, Car, Cpu, Phone,
   User, Image as ImageIcon, Upload, Trash2, ZoomIn,
@@ -76,8 +77,8 @@ const EMPTY_FORM: FormState = {
   fault_codes: '', inspection_fee: '', notes: '',
 }
 
-function TypeBadge({ type }: { type: InspectionType }) {
-  return type === 'car' ? (
+function TypeBadge({ type }: { type?: InspectionType }) {
+  return type !== 'ecu' ? (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
       <Car size={11} /> فحص سيارة
     </span>
@@ -97,10 +98,12 @@ function FaultBadge({ code }: { code: string }) {
 }
 
 export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
+  const router = useRouter()
   const supabase = createClient()
   const [records, setRecords] = useState<QuickInspection[]>(() =>
-    (initialRecords || []).map(r => ({
+    (initialRecords || []).map((r: any) => ({
       ...r,
+      type: r.inspection_type || r.type || 'car',
       image_paths: normalizeImagePaths(r.image_paths),
     }))
   )
@@ -165,87 +168,84 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
   function resetModal() { setShowModal(false); setForm(EMPTY_FORM); setImageFiles([]) }
 
   async function handleSave() {
-    if (!form.customer_name.trim()) { toast.error('اسم الزبون مطلوب'); return }
     setSaving(true)
     try {
-      const newId = crypto.randomUUID()
       const uploadedImages = imageFiles.length > 0
-        ? await Promise.all(imageFiles.map(f => uploadImage(f, newId)))
+        ? await Promise.all(imageFiles.map(f => uploadImage(f, crypto.randomUUID())))
         : []
 
-      const fee = parseAmount(form.inspection_fee)
+      const uploadedImageUrls: string[] = uploadedImages.map(img => img.publicUrl).filter(Boolean)
 
-      // Send array of public URLs directly, defaulting to []
-      const publicUrls: string[] = uploadedImages.map(img => img.publicUrl).filter(Boolean)
-
-      const basePayload = {
-        id: newId,
-        type: form.type,
-        customer_name: form.customer_name.trim(),
-        phone: form.phone.trim() || null,
-        subject: form.subject.trim() || null,
-        fault_codes: form.fault_codes.trim() || null,
-        inspection_fee: fee,
-        notes: form.notes.trim() || null,
+      const formData = {
+        customer_name: form.customer_name,
+        phone: form.phone,
+        inspection_type: form.type || 'car',
+        car_info: form.type === 'car' ? (form.subject?.trim() || null) : null,
+        ecu_info: form.type === 'ecu' ? (form.subject?.trim() || null) : null,
+        subject: form.subject,
+        fault_codes: form.fault_codes,
+        inspection_fee: Number(parseAmount(form.inspection_fee)) || 0,
+        notes: form.notes,
       }
 
-      // Primary payload: format image_paths as a proper array of strings (public URLs)
-      let payload: any = {
-        ...basePayload,
-        image_paths: publicUrls,
+      const cleanPayload = {
+        customer_name: formData.customer_name?.trim() || 'زبون فحص',
+        phone: formData.phone?.trim() || null,
+        inspection_type: formData.inspection_type || 'car',
+        car_info: formData.car_info?.trim() || null,
+        ecu_info: formData.ecu_info?.trim() || null,
+        subject: formData.subject?.trim() || (formData.inspection_type === 'car' ? 'فحص سيارة' : 'فحص عقل ECU'),
+        fault_codes: formData.fault_codes?.trim() || null,
+        inspection_fee: Number(formData.inspection_fee) || 0,
+        cost: Number(formData.inspection_fee) || 0,
+        notes: formData.notes?.trim() || null,
+        image_paths: Array.isArray(uploadedImageUrls) ? uploadedImageUrls : [],
+        status: 'completed'
       }
 
-      let { data, error } = await supabase.from('quick_inspections').insert(payload).select().single()
+      const { data, error } = await supabase
+        .from('quick_inspections')
+        .insert(cleanPayload as any)
+        .select()
+        .single()
 
-      // Fallback handling if schema expects serialized string or structured objects
       if (error) {
-        console.warn('Initial insert with public URLs failed, trying serialized JSON fallback:', error)
-        const serializedPayload = {
-          ...basePayload,
-          image_paths: JSON.stringify(publicUrls),
-        }
-        const retry1 = await supabase.from('quick_inspections').insert(serializedPayload).select().single()
-        if (!retry1.error) {
-          data = retry1.data
-          error = null
-        } else {
-          console.warn('Serialized JSON fallback failed, trying object array fallback:', retry1.error)
-          const objectPayload = {
-            ...basePayload,
-            image_paths: uploadedImages.length > 0 ? uploadedImages.map(img => ({ name: img.name, path: img.publicUrl, size: img.size })) : [],
-          }
-          const retry2 = await supabase.from('quick_inspections').insert(objectPayload).select().single()
-          if (!retry2.error) {
-            data = retry2.data
-            error = null
-          } else {
-            throw retry2.error || retry1.error || error
-          }
-        }
+        console.error('Quick Inspection Insert Error:', error)
+        toast.error('فشل في حفظ الفحص: ' + (error.message || 'خطأ في قاعدة البيانات'))
+        return
       }
 
-      if (error || !data) {
-        throw error || new Error('فشل إتمام عملية الحفظ')
-      }
-
-      const normalizedImages = normalizeImagePaths((data as any).image_paths)
-      const enrichedImages: ImageEntry[] = normalizedImages.map(img => {
-        const local = uploadedImages.find(e => e.publicUrl === img.path || e.path === img.path)
-        return local ? { ...img, name: local.name, size: local.size } : img
-      })
-
-      const newRecord: QuickInspection = {
-        ...(data as any),
-        image_paths: enrichedImages.length > 0 ? enrichedImages : (publicUrls.map(u => ({ name: u.split('/').pop() || 'صورة', path: u }))),
-      }
-
-      setRecords(prev => [newRecord, ...prev])
-      resetModal()
       toast.success('تم حفظ الفحص بنجاح ✓')
+      resetModal()
+
+      // Immediately refresh the inspections list
+      const { data: updatedList, error: refreshErr } = await supabase
+        .from('quick_inspections')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (!refreshErr && updatedList) {
+        setRecords(updatedList.map((r: any) => ({
+          ...r,
+          type: r.inspection_type || r.type || 'car',
+          image_paths: normalizeImagePaths(r.image_paths),
+        })))
+      } else if (data) {
+        const newRecord: QuickInspection = {
+          ...(data as any),
+          type: (data as any).inspection_type || (data as any).type || 'car',
+          image_paths: normalizeImagePaths((data as any).image_paths),
+        }
+        setRecords(prev => [newRecord, ...prev])
+      }
+
+      router.refresh()
     } catch (err: any) {
-      console.error(err)
+      console.error('Quick Inspection Save Error:', err)
       toast.error('فشل الحفظ: ' + (err?.message ?? 'خطأ غير معروف'))
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleDelete(record: QuickInspection) {

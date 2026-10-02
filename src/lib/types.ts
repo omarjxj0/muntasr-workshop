@@ -135,13 +135,18 @@ export interface ImageEntry {
 export interface QuickInspection {
   id: string
   type: InspectionType
+  inspection_type?: InspectionType
   customer_name: string
   phone: string | null
+  car_info?: string | null
+  ecu_info?: string | null
   subject: string | null        // car model or ECU type
   fault_codes: string | null
   image_paths: ImageEntry[] | string[]
   inspection_fee: number
+  cost?: number
   notes: string | null
+  status?: string
   created_by: string | null
   created_at: string
   updated_at: string
