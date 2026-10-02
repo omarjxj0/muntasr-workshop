@@ -119,15 +119,11 @@ export default function VisitDetailClient({ visitId, role }: Props) {
   const handleCollectPayment = async () => {
     if (!visit || isLocked) return
     const currentLabor = parseAmount(laborCostInput) || Number(visit.labor_cost) || 0
-    const grandTotal = (Number(visit.total_amount) || 0) + currentLabor
+    const grandTotal = currentLabor
     
-    if (grandTotal <= 0) { toast.error('لا يوجد مبلغ للتحصيل'); return }
+    if (grandTotal <= 0) { toast.error('يرجى تحديد أتعاب العمل والبرمجة أولاً'); return }
 
-    let descParts = []
-    if (Number(visit.total_amount) > 0) descParts.push('مواد')
-    if (currentLabor > 0) descParts.push('أجرة عمل')
-    
-    const desc = `دفعة زيارة (${descParts.join(' و ')}) - ${customer?.name ?? ''} - ${vehicle?.license_plate ?? ''}`
+    const desc = `أجور صيانة وبرمجة - ${customer?.name ?? ''} - ${vehicle?.make_and_model ?? ''}`
 
     const { error } = await supabase.from('transactions').insert({
       type: 'Income',
@@ -294,19 +290,26 @@ export default function VisitDetailClient({ visitId, role }: Props) {
               <div className="overflow-x-auto">
                 <div className="min-w-[500px] space-y-2 pb-2">
                   <div className="grid grid-cols-12 gap-2 text-xs text-slate-400 px-3">
-                    <div className="col-span-5">القطعة</div>
+                    <div className="col-span-6">القطعة المركبة</div>
+                    <div className="col-span-3">الباركود / الموقع</div>
                     <div className="col-span-2 text-center">الكمية</div>
-                    <div className="col-span-2 text-center">سعر الوحدة</div>
-                    <div className="col-span-2 text-left">الإجمالي</div>
                     <div className="col-span-1" />
                   </div>
                   {parts.map(part => (
                     <div key={part.id} className="grid grid-cols-12 gap-2 items-center bg-slate-50 border border-slate-100 rounded-2xl px-3 py-3">
-                      <div className="col-span-5">
+                      <div className="col-span-6">
                         <p className="font-semibold text-slate-700 text-sm">{part.ecus?.name}</p>
                         <p className="text-xs text-slate-400">
                           {[part.ecus?.manufacturer, part.ecus?.ecu_family, part.ecus?.vehicle_model_code, part.ecus?.software_id].filter(Boolean).join(' › ') || '—'}
                         </p>
+                      </div>
+                      <div className="col-span-3 text-xs text-slate-500 font-mono">
+                        {part.ecus?.barcode || part.ecus?.shelf_location ? (
+                          <div className="flex flex-col gap-0.5">
+                            {part.ecus?.barcode && <span>📦 {part.ecus.barcode}</span>}
+                            {part.ecus?.shelf_location && <span className="text-violet-600 font-sans">رف: {part.ecus.shelf_location}</span>}
+                          </div>
+                        ) : '—'}
                       </div>
                       <div className="col-span-2 text-center">
                         <QuantityInput
@@ -315,12 +318,6 @@ export default function VisitDetailClient({ visitId, role }: Props) {
                           disabled={isLocked}
                           onUpdate={() => { loadParts(); loadVisit() }}
                         />
-                      </div>
-                      <div className="col-span-2 text-center text-slate-500 text-sm">
-                        {formatCurrency(part.selling_price_at_time)}
-                      </div>
-                      <div className="col-span-2 text-left font-bold text-emerald-600 text-sm">
-                        {formatCurrency(part.quantity * part.selling_price_at_time)}
                       </div>
                       <div className="col-span-1 flex justify-center">
                         {!isLocked && (
@@ -372,21 +369,24 @@ export default function VisitDetailClient({ visitId, role }: Props) {
           <div className="soft-card p-5 space-y-3">
             <h3 className="font-semibold text-slate-700 flex items-center gap-2">
               <DollarSign size={16} className="text-emerald-500" />
-              ملخص التكلفة
+              أجور الصيانة والإيراد
             </h3>
-            <div className="space-y-2">
-              {parts.map((p: any) => (
-                <div key={p.id} className="flex justify-between text-sm">
-                  <span className="text-slate-500 truncate ml-2">{p.ecus?.name}</span>
-                  <span className="text-slate-600 shrink-0">
-                    {p.quantity} × {formatCurrency(p.selling_price_at_time)}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <div className="border-t border-slate-100 pt-3 space-y-3">
+            {parts.length > 0 && (
+              <div className="space-y-1.5 pb-2 border-b border-slate-100">
+                <p className="text-xs text-slate-400 font-medium">العقول والقطع المركبة:</p>
+                {parts.map((p: any) => (
+                  <div key={p.id} className="flex justify-between items-center text-xs text-slate-600 bg-slate-50 px-2.5 py-1.5 rounded-lg border border-slate-100">
+                    <span className="truncate">{p.ecus?.name}</span>
+                    <span className="font-bold text-violet-700 bg-violet-100 px-2 py-0.5 rounded-md shrink-0">
+                      {p.quantity} {p.quantity === 1 ? 'قطعة' : 'قطع'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="pt-1 space-y-3">
               <div className="flex justify-between items-center">
-                <span className="text-slate-600 text-sm">أجرة العمل</span>
+                <span className="text-slate-600 text-sm font-medium">أجرة العمل والبرمجة</span>
                 <input
                   type="text"
                   inputMode="numeric"
@@ -396,7 +396,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
                   disabled={isLocked}
                   lang="en"
                   dir="ltr"
-                  className={`w-24 px-2 py-1.5 rounded-xl text-slate-700 text-sm transition-all border-2 border-slate-200 ${
+                  className={`w-28 px-2.5 py-1.5 rounded-xl font-mono text-slate-800 text-sm transition-all border-2 border-slate-200 ${
                     isLocked
                       ? 'bg-slate-100 cursor-not-allowed text-slate-500'
                       : 'bg-white focus:outline-none focus:border-violet-400 focus:shadow-[0_0_0_3px_rgba(124,58,237,0.1)]'
@@ -404,10 +404,10 @@ export default function VisitDetailClient({ visitId, role }: Props) {
                   placeholder="0"
                 />
               </div>
-              <div className="flex justify-between font-bold pt-2 border-t border-slate-100">
-                <span className="text-slate-600">الإجمالي الشامل</span>
-                <span className="text-emerald-600 text-lg">
-                  {formatCurrency((visit.total_amount || 0) + (visit.labor_cost || 0))}
+              <div className="flex justify-between items-center font-bold pt-2 border-t border-slate-100">
+                <span className="text-slate-700">دخل الزيارة المحصل</span>
+                <span className="text-emerald-600 text-lg font-mono">
+                  {formatCurrency(parseAmount(laborCostInput) || Number(visit.labor_cost) || 0)}
                 </span>
               </div>
             </div>
@@ -420,7 +420,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
                   boxShadow: '0 4px 15px rgba(16,185,129,0.3)',
                 }}
               >
-                💰 تحصيل الدفعة وتسليم السيارة
+                💰 تحصيل الإيراد وتسليم السيارة
               </button>
             )}
           </div>

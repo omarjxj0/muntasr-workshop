@@ -31,6 +31,39 @@ function parseFaultBadges(raw: string | null): string[] {
   return [...new Set(codes.map(c => c.toUpperCase()))].slice(0, 6)
 }
 
+export function normalizeImagePaths(raw: any): ImageEntry[] {
+  if (!raw) return []
+  let parsed = raw
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw)
+    } catch {
+      if (raw.trim().length > 0) {
+        const path = raw.trim()
+        const name = path.split('/').pop() || 'صورة'
+        return [{ name, path }]
+      }
+      return []
+    }
+  }
+  if (!Array.isArray(parsed)) return []
+  return parsed
+    .map((item, idx) => {
+      if (typeof item === 'string') {
+        const name = item.split('/').pop() || `صورة ${idx + 1}`
+        return { name, path: item }
+      }
+      if (item && typeof item === 'object') {
+        const path = (item as any).path || (item as any).url || ''
+        const name = (item as any).name || (path ? path.split('/').pop() : `صورة ${idx + 1}`)
+        const size = typeof (item as any).size === 'number' ? (item as any).size : undefined
+        return { name, path, size }
+      }
+      return null
+    })
+    .filter((entry): entry is ImageEntry => Boolean(entry && entry.path))
+}
+
 interface Props { initialRecords: QuickInspection[]; isAdmin: boolean }
 
 interface FormState {
@@ -65,7 +98,12 @@ function FaultBadge({ code }: { code: string }) {
 
 export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
   const supabase = createClient()
-  const [records, setRecords] = useState<QuickInspection[]>(initialRecords)
+  const [records, setRecords] = useState<QuickInspection[]>(() =>
+    (initialRecords || []).map(r => ({
+      ...r,
+      image_paths: normalizeImagePaths(r.image_paths),
+    }))
+  )
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -78,9 +116,10 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   const filtered = useMemo(() => {
+    const list = [...records].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     const q = search.trim().toLowerCase()
-    if (!q) return records
-    return records.filter(r =>
+    if (!q) return list
+    return list.filter(r =>
       [r.customer_name, r.subject, r.fault_codes, r.phone, r.notes]
         .some(f => f?.toLowerCase().includes(q))
     )
@@ -100,17 +139,26 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
     if (files.length) setImageFiles(prev => mergeFiles(prev, files))
   }, []) // eslint-disable-line
 
-  async function uploadImage(file: File, recordId: string): Promise<ImageEntry> {
+  async function uploadImage(file: File, recordId: string): Promise<{ name: string; path: string; publicUrl: string; size: number }> {
     const ext = file.name.split('.').pop()
     const filePath = recordId + '/' + Date.now() + '_' + Math.random().toString(36).slice(2, 6) + '.' + ext
     const { error } = await supabase.storage.from(BUCKET).upload(filePath, file, { upsert: true })
     if (error) throw error
-    return { name: file.name, path: filePath, size: file.size }
+    const { data } = supabase.storage.from(BUCKET).getPublicUrl(filePath)
+    const publicUrl = data?.publicUrl || filePath
+    return { name: file.name, path: filePath, publicUrl, size: file.size }
   }
 
   async function openLightbox(imgPath: string) {
+    if (imgPath.startsWith('http://') || imgPath.startsWith('https://')) {
+      setLightboxUrl(imgPath)
+      return
+    }
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(imgPath, 120)
-    if (error || !data?.signedUrl) { toast.error('فشل تحميل الصورة'); return }
+    if (error || !data?.signedUrl) {
+      setLightboxUrl(imgPath)
+      return
+    }
     setLightboxUrl(data.signedUrl)
   }
 
@@ -121,18 +169,79 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
     setSaving(true)
     try {
       const newId = crypto.randomUUID()
-      const imageEntries: ImageEntry[] = await Promise.all(imageFiles.map(f => uploadImage(f, newId)))
+      const uploadedImages = imageFiles.length > 0
+        ? await Promise.all(imageFiles.map(f => uploadImage(f, newId)))
+        : []
+
       const fee = parseAmount(form.inspection_fee)
-      const payload = {
-        id: newId, type: form.type, customer_name: form.customer_name.trim(),
-        phone: form.phone.trim() || null, subject: form.subject.trim() || null,
-        fault_codes: form.fault_codes.trim() || null, image_paths: imageEntries,
-        inspection_fee: fee, notes: form.notes.trim() || null,
+
+      // Send array of public URLs directly, defaulting to []
+      const publicUrls: string[] = uploadedImages.map(img => img.publicUrl).filter(Boolean)
+
+      const basePayload = {
+        id: newId,
+        type: form.type,
+        customer_name: form.customer_name.trim(),
+        phone: form.phone.trim() || null,
+        subject: form.subject.trim() || null,
+        fault_codes: form.fault_codes.trim() || null,
+        inspection_fee: fee,
+        notes: form.notes.trim() || null,
       }
-      const { data, error } = await supabase.from('quick_inspections').insert(payload).select().single()
-      if (error) throw error
-      setRecords(prev => [data as QuickInspection, ...prev])
-      resetModal(); toast.success('تم حفظ الفحص بنجاح ✓')
+
+      // Primary payload: format image_paths as a proper array of strings (public URLs)
+      let payload: any = {
+        ...basePayload,
+        image_paths: publicUrls,
+      }
+
+      let { data, error } = await supabase.from('quick_inspections').insert(payload).select().single()
+
+      // Fallback handling if schema expects serialized string or structured objects
+      if (error) {
+        console.warn('Initial insert with public URLs failed, trying serialized JSON fallback:', error)
+        const serializedPayload = {
+          ...basePayload,
+          image_paths: JSON.stringify(publicUrls),
+        }
+        const retry1 = await supabase.from('quick_inspections').insert(serializedPayload).select().single()
+        if (!retry1.error) {
+          data = retry1.data
+          error = null
+        } else {
+          console.warn('Serialized JSON fallback failed, trying object array fallback:', retry1.error)
+          const objectPayload = {
+            ...basePayload,
+            image_paths: uploadedImages.length > 0 ? uploadedImages.map(img => ({ name: img.name, path: img.publicUrl, size: img.size })) : [],
+          }
+          const retry2 = await supabase.from('quick_inspections').insert(objectPayload).select().single()
+          if (!retry2.error) {
+            data = retry2.data
+            error = null
+          } else {
+            throw retry2.error || retry1.error || error
+          }
+        }
+      }
+
+      if (error || !data) {
+        throw error || new Error('فشل إتمام عملية الحفظ')
+      }
+
+      const normalizedImages = normalizeImagePaths((data as any).image_paths)
+      const enrichedImages: ImageEntry[] = normalizedImages.map(img => {
+        const local = uploadedImages.find(e => e.publicUrl === img.path || e.path === img.path)
+        return local ? { ...img, name: local.name, size: local.size } : img
+      })
+
+      const newRecord: QuickInspection = {
+        ...(data as any),
+        image_paths: enrichedImages.length > 0 ? enrichedImages : (publicUrls.map(u => ({ name: u.split('/').pop() || 'صورة', path: u }))),
+      }
+
+      setRecords(prev => [newRecord, ...prev])
+      resetModal()
+      toast.success('تم حفظ الفحص بنجاح ✓')
     } catch (err: any) {
       console.error(err)
       toast.error('فشل الحفظ: ' + (err?.message ?? 'خطأ غير معروف'))
@@ -143,7 +252,8 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
     if (!confirm('هل تريد حذف فحص “' + record.customer_name + '” بشكل نهائي؟')) return
     setDeletingId(record.id)
     try {
-      const paths = record.image_paths.map(img => img.path)
+      const images = normalizeImagePaths(record.image_paths)
+      const paths = images.map(img => img.path).filter(Boolean)
       if (paths.length) await supabase.storage.from(BUCKET).remove(paths)
       const { error } = await supabase.from('quick_inspections').delete().eq('id', record.id)
       if (error) throw error
@@ -239,15 +349,21 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
         </div>
       ) : (
         <div className="space-y-3">
-          {filtered.map(record => {
+          {filtered.map((record, index) => {
             const dtcBadges = parseFaultBadges(record.fault_codes)
+            const images = normalizeImagePaths(record.image_paths)
             const isExpanded = expandedId === record.id
             return (
               <div key={record.id} className={cn('bg-white rounded-2xl border-2 shadow-sm overflow-hidden transition-all duration-200', isExpanded ? 'border-teal-300 shadow-md' : 'border-slate-100 hover:border-teal-200')}>
                 <div className="p-4 sm:p-5 cursor-pointer flex flex-col sm:flex-row sm:items-start justify-between gap-3 hover:bg-teal-50/20 transition-colors select-none" onClick={() => setExpandedId(isExpanded ? null : record.id)}>
                   <div className="flex items-start gap-3 flex-1 min-w-0">
-                    <div className={cn('mt-0.5 w-10 h-10 rounded-xl flex items-center justify-center shrink-0', record.type === 'car' ? 'bg-sky-100 text-sky-600' : 'bg-violet-100 text-violet-600')}>
-                      {record.type === 'car' ? <Car size={18} /> : <Cpu size={18} />}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="font-mono text-xs font-bold text-teal-700 bg-teal-50 px-2 py-1 rounded-lg border border-teal-200/80">
+                        #{index + 1}
+                      </span>
+                      <div className={cn('mt-0.5 w-10 h-10 rounded-xl flex items-center justify-center shrink-0', record.type === 'car' ? 'bg-sky-100 text-sky-600' : 'bg-violet-100 text-violet-600')}>
+                        {record.type === 'car' ? <Car size={18} /> : <Cpu size={18} />}
+                      </div>
                     </div>
                     <div className="flex-1 min-w-0 space-y-1.5">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -264,7 +380,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                   </div>
                   <div className="flex items-center gap-2 flex-wrap shrink-0 sm:flex-col sm:items-end sm:gap-1.5">
                     {record.inspection_fee > 0 && <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[12px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"><DollarSign size={11} /> {formatCurrency(record.inspection_fee)}</span>}
-                    {record.image_paths.length > 0 && <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200"><ImageIcon size={10} /> {record.image_paths.length} صورة</span>}
+                    {images.length > 0 && <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200"><ImageIcon size={10} /> {images.length} صورة</span>}
                     {record.fault_codes && dtcBadges.length === 0 && <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200"><AlertCircle size={10} /> أعطال</span>}
                   </div>
                 </div>
@@ -299,11 +415,11 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                       </div>
                     )}
 
-                    {record.image_paths.length > 0 && (
+                    {images.length > 0 && (
                       <div>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5"><ImageIcon size={12} className="text-fuchsia-500" /> الصور ({record.image_paths.length})</p>
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1.5"><ImageIcon size={12} className="text-fuchsia-500" /> الصور ({images.length})</p>
                         <div className="flex flex-wrap gap-3">
-                          {record.image_paths.map((img, i) => (
+                          {images.map((img, i) => (
                             <button key={i} onClick={() => openLightbox(img.path)} className="group relative w-24 h-24 rounded-2xl border-2 border-fuchsia-100 bg-fuchsia-50 overflow-hidden hover:border-fuchsia-400 transition-all hover:shadow-lg" title={img.name}>
                               <div className="absolute inset-0 flex items-center justify-center">
                                 <ImageIcon size={28} className="text-fuchsia-300 group-hover:opacity-0 transition-opacity" />

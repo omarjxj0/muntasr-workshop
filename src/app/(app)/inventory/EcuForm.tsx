@@ -177,11 +177,6 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
       return
     }
 
-    if (form.purchase_price < 0 || form.selling_price < 0) {
-      toast.error('الأسعار لا يمكن أن تكون سالبة')
-      return
-    }
-
     setLoading(true)
     const payload = {
       name:                form.name.trim(),
@@ -190,8 +185,8 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
       shelf_location:      form.shelf_location || null,
       stock_quantity:      mode === 'new' ? 1 : (form.stock_quantity ?? 1),
       min_quantity:        1,
-      purchase_price:      parseAmount(form.purchase_price),
-      selling_price:       parseAmount(form.selling_price),
+      purchase_price:      0,
+      selling_price:       0,
       quantity:            1,
       notes:               form.notes         || null,
       manufacturer:        resolvedManufacturer  || null,
@@ -475,8 +470,8 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
             />
           </div>
 
-          {/* ── Quantities & Prices ── */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {/* ── Quantities ── */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>
                 الكمية في المخزون
@@ -502,38 +497,6 @@ export default function EcuForm({ mode, ecuId }: EcuFormProps) {
                 tabIndex={-1}
                 className={`${inputClass} bg-slate-50 text-slate-500 cursor-not-allowed border-dashed`}
               />
-            </div>
-            <div>
-              <label className={labelClass}>سعر الشراء (IQD)</label>
-              <input type="text" inputMode="numeric" {...numericField('purchase_price')} className={inputClass} lang="en" dir="ltr" />
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {[25000, 50000, 100000].map(inc => (
-                  <button
-                    key={inc}
-                    type="button"
-                    onClick={() => setForm(p => ({ ...p, purchase_price: (Number(p.purchase_price) || 0) + inc }))}
-                    className="px-2 py-0.5 text-[11px] font-semibold rounded-lg bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
-                  >
-                    +{inc.toLocaleString('en-US')}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className={labelClass}>سعر البيع (IQD)</label>
-              <input type="text" inputMode="numeric" {...numericField('selling_price')} className={inputClass} lang="en" dir="ltr" />
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {[25000, 50000, 100000].map(inc => (
-                  <button
-                    key={inc}
-                    type="button"
-                    onClick={() => setForm(p => ({ ...p, selling_price: (Number(p.selling_price) || 0) + inc }))}
-                    className="px-2 py-0.5 text-[11px] font-semibold rounded-lg bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors"
-                  >
-                    +{inc.toLocaleString('en-US')}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
 

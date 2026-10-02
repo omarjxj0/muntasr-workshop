@@ -3,11 +3,10 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import {
   Package, Plus, AlertTriangle, Search, MapPin, ChevronDown, ChevronUp,
-  Scan, RotateCcw, X, CheckCircle2, Layers, ListFilter, Copy, Pencil, Zap,
+  Scan, RotateCcw, X, CheckCircle2, Layers, Copy, Pencil, Zap,
 } from 'lucide-react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import { formatCurrency } from '@/lib/utils'
 import toast from 'react-hot-toast'
 import InventoryActions from './InventoryActions'
 
@@ -40,10 +39,6 @@ export interface EcuGroup {
   totalUnitsCount: number
   min_quantity: number
   items: any[]
-  minPrice: number
-  maxPrice: number
-  minPurchasePrice: number
-  maxPurchasePrice: number
   shelfLocations: string[]
   hasLowStock: boolean
   isOutOfStock: boolean
@@ -65,8 +60,7 @@ export default function InventoryClient({
   const [dbMc, setDbMc] = useState<McRow[]>(modelCodes)
   const [dbSwId, setDbSwId] = useState<SwIdRow[]>(softwareIds)
 
-  // ── View Mode: Grouped (default) vs Flat list ─────────────
-  const [viewMode, setViewMode] = useState<'grouped' | 'flat'>('grouped')
+  // ── Expanded groups state ────────────────────────────────
   const [expandedGroupKeys, setExpandedGroupKeys] = useState<Set<string>>(new Set())
 
   // ── Search & Filter State ─────────────────────────────────
@@ -270,55 +264,6 @@ export default function InventoryClient({
     return matches.length === 1 ? matches[0] : null
   }, [initialEcus, search])
 
-  // ── Filtered Flat ECUs ─────────────────────────────────────
-  const filteredEcus = useMemo(() => {
-    return (initialEcus || []).filter(item => {
-      const q = search.trim().toLowerCase()
-      const matchesSearch =
-        !q ||
-        (item.barcode && item.barcode.toLowerCase().includes(q)) ||
-        (item.name && item.name.toLowerCase().includes(q)) ||
-        (item.manufacturer && item.manufacturer.toLowerCase().includes(q)) ||
-        (item.ecu_family && item.ecu_family.toLowerCase().includes(q)) ||
-        (item.vehicle_model_code && item.vehicle_model_code.toLowerCase().includes(q)) ||
-        (item.software_id && item.software_id.toLowerCase().includes(q)) ||
-        (item.shelf_location && item.shelf_location.toLowerCase().includes(q)) ||
-        (item.notes && item.notes.toLowerCase().includes(q)) ||
-        (item.symbols_codes && item.symbols_codes.toLowerCase().includes(q))
-
-      const matchesMfr =
-        !selectedMfrName ||
-        item.manufacturer?.trim().toLowerCase() === selectedMfrName.trim().toLowerCase()
-      const matchesFam =
-        !selectedFamName ||
-        item.ecu_family?.trim().toLowerCase() === selectedFamName.trim().toLowerCase()
-      const matchesMc =
-        !selectedMcName ||
-        item.vehicle_model_code?.trim().toLowerCase() === selectedMcName.trim().toLowerCase()
-      const matchesSw =
-        !selectedSwName ||
-        item.software_id?.trim().toLowerCase() === selectedSwName.trim().toLowerCase()
-
-      const qty = Number(item.stock_quantity ?? item.quantity ?? 1) || 0
-      const isOut = qty === 0
-      const isLow = qty <= 1 && !isOut
-
-      const matchesStock =
-        stockFilter === 'all' ||
-        (stockFilter === 'low' && isLow) ||
-        (stockFilter === 'out' && isOut)
-
-      return matchesSearch && matchesMfr && matchesFam && matchesMc && matchesSw && matchesStock
-    })
-  }, [
-    initialEcus,
-    search,
-    selectedMfrName,
-    selectedFamName,
-    selectedMcName,
-    selectedSwName,
-    stockFilter,
-  ])
 
   // ── Aggregated Grouped View Engine ────────────────────────
   // Groups by (Manufacturer + Family + Model Code + Software ID)
@@ -415,13 +360,6 @@ export default function InventoryClient({
         continue
       }
 
-      const prices = group.items.map(it => Number(it.selling_price) || 0)
-      const purchasePrices = group.items.map(it => Number(it.purchase_price) || 0)
-      const minPrice = prices.length ? Math.min(...prices) : 0
-      const maxPrice = prices.length ? Math.max(...prices) : 0
-      const minPurchasePrice = purchasePrices.length ? Math.min(...purchasePrices) : 0
-      const maxPurchasePrice = purchasePrices.length ? Math.max(...purchasePrices) : 0
-
       const shelfLocations = Array.from(
         new Set(group.items.map(it => it.shelf_location?.trim()).filter(Boolean))
       ) as string[]
@@ -444,10 +382,6 @@ export default function InventoryClient({
         totalUnitsCount: group.items.length,
         min_quantity: minQty,
         items: sortedItems,
-        minPrice,
-        maxPrice,
-        minPurchasePrice,
-        maxPurchasePrice,
         shelfLocations,
         hasLowStock,
         isOutOfStock,
@@ -601,11 +535,7 @@ export default function InventoryClient({
             مخزون القطع (ECU)
           </h1>
           <p className="text-slate-500 mt-0.5 text-sm">
-            {viewMode === 'grouped' ? (
-              <span>{groupedEcus.length} طراز مجمّع ({filteredEcus.length} قطعة متوفرة في المخزن)</span>
-            ) : (
-              <span>{filteredEcus.length} من أصل {initialEcus.length} صنف</span>
-            )}
+            {groupedEcus.length} طراز مجمّع ({initialEcus?.length ?? 0} قطعة في المخزن)
           </p>
         </div>
         {isAdmin && (
@@ -831,40 +761,23 @@ export default function InventoryClient({
         </div>
       </div>
 
-      {/* ── View Switcher & Expand/Collapse Controls ─────────── */}
+      {/* ── Grouped View Controls ─────────────────────────── */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
-        <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-xl border border-slate-200">
-          <button
-            type="button"
-            onClick={() => setViewMode('grouped')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              viewMode === 'grouped'
-                ? 'bg-white text-violet-700 shadow-xs'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-50 text-violet-700 border border-violet-200 text-xs font-bold">
             <Layers size={14} />
-            عرض مجمّع ({groupedEcus.length} طراز)
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('flat')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-              viewMode === 'flat'
-                ? 'bg-white text-violet-700 shadow-xs'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <ListFilter size={14} />
-            عرض فردي ({filteredEcus.length} قطعة)
-          </button>
+            طرازات العقول ({groupedEcus.length} طراز مجمّع)
+          </span>
+          <span className="text-xs text-slate-400">
+            • إجمالي القطع: {initialEcus?.length ?? 0} قطعة
+          </span>
         </div>
 
-        {viewMode === 'grouped' && groupedEcus.length > 0 && (
+        {groupedEcus.length > 0 && (
           <button
             type="button"
             onClick={toggleExpandAll}
-            className="flex items-center gap-1 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-violet-50 hover:border-violet-300 text-xs font-semibold text-slate-600 hover:text-violet-700 transition-colors"
+            className="flex items-center gap-1 px-3.5 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-violet-50 hover:border-violet-300 text-xs font-semibold text-slate-600 hover:text-violet-700 transition-colors"
           >
             {expandedGroupKeys.size === groupedEcus.length ? (
               <>
@@ -881,11 +794,8 @@ export default function InventoryClient({
         )}
       </div>
 
-      {/* ══════════════════════════════════════════════════════
-          MODE 1: GROUPED VIEW (ACCORDION & BREAKDOWN)
-          ══════════════════════════════════════════════════════ */}
-      {viewMode === 'grouped' && (
-        <div className="space-y-4">
+      {/* ── Grouped ECU Cards ── */}
+      <div className="space-y-4">
           {groupedEcus.length === 0 && (
             <div className="soft-card py-16 text-center text-slate-400 text-sm">
               لا توجد طرازات مطابقة لخيارات البحث المحددة
@@ -1020,11 +930,6 @@ export default function InventoryClient({
                         <span className="text-slate-400 font-medium">
                           {group.totalUnitsCount} {group.totalUnitsCount === 1 ? 'وحدة مسجلة' : 'وحدات مسجلة'}
                         </span>
-                        <span className="text-slate-300">•</span>
-                        <span className="text-emerald-600 font-bold font-mono">
-                          {formatCurrency(group.minPrice)}
-                          {group.maxPrice !== group.minPrice && ` - ${formatCurrency(group.maxPrice)}`}
-                        </span>
                       </div>
                     </div>
                   </div>
@@ -1059,8 +964,6 @@ export default function InventoryClient({
                             <th className="text-center px-3 py-3 font-semibold">الكمية</th>
                             <th className="text-right px-3 py-3 font-semibold">الملاحظات الفنية</th>
                             <th className="text-right px-3 py-3 font-semibold">رموز الأعطال</th>
-                            {isAdmin && <th className="text-left px-3 py-3 font-semibold">سعر الشراء</th>}
-                            <th className="text-left px-4 py-3 font-semibold">سعر البيع</th>
                             {isAdmin && <th className="px-3 py-3 w-20 text-center">الإجراءات</th>}
                           </tr>
                         </thead>
@@ -1149,14 +1052,6 @@ export default function InventoryClient({
                                 </td>
                                 <td className="px-3 py-3 font-mono text-slate-500">
                                   {ecu.symbols_codes || <span className="text-slate-300">—</span>}
-                                </td>
-                                {isAdmin && (
-                                  <td className="px-3 py-3 text-left font-mono text-slate-500">
-                                    {formatCurrency(ecu.purchase_price)}
-                                  </td>
-                                )}
-                                <td className="px-4 py-3 text-left font-mono font-bold text-emerald-600">
-                                  {formatCurrency(ecu.selling_price)}
                                 </td>
                                 {isAdmin && (
                                   <td className="px-3 py-3 text-center">
@@ -1252,17 +1147,7 @@ export default function InventoryClient({
                               </p>
                             )}
 
-                            <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
-                              <div className="flex items-center gap-2">
-                                {isAdmin && (
-                                  <span className="text-slate-400">
-                                    شراء: <span className="font-mono font-semibold text-slate-600">{formatCurrency(ecu.purchase_price)}</span>
-                                  </span>
-                                )}
-                                <span className="text-emerald-600 font-bold font-mono">
-                                  بيع: {formatCurrency(ecu.selling_price)}
-                                </span>
-                              </div>
+                            <div className="flex items-center justify-end pt-1 border-t border-slate-100 text-xs">
                               {isAdmin && (
                                 <div className="flex items-center gap-1">
                                   <Link
@@ -1285,216 +1170,6 @@ export default function InventoryClient({
             )
           })}
         </div>
-      )}
-
-      {/* ══════════════════════════════════════════════════════
-          MODE 2: FLAT / INDIVIDUAL PIECES VIEW
-          ══════════════════════════════════════════════════════ */}
-      {viewMode === 'flat' && (
-        <>
-          {/* Desktop Table (hidden on mobile) */}
-          <div className="soft-card overflow-hidden hidden md:block">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-slate-100 text-slate-500 bg-slate-50/60">
-                    <th className="text-right px-5 py-4 font-semibold">الاسم</th>
-                    <th className="text-right px-4 py-4 font-semibold">التصنيف الهرمي</th>
-                    <th className="text-right px-4 py-4 font-semibold">الباركود / VIN</th>
-                    <th className="text-center px-4 py-4 font-semibold">موقع الرف</th>
-                    <th className="text-center px-4 py-4 font-semibold">المخزون</th>
-                    {isAdmin && <th className="text-left px-4 py-4 font-semibold">سعر الشراء</th>}
-                    <th className="text-left px-4 py-4 font-semibold">سعر البيع</th>
-                    {isAdmin && <th className="px-4 py-4" />}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {filteredEcus.map((ecu: any) => {
-                    const isExactMatched = exactBarcodeMatch?.id === ecu.id
-                    return (
-                      <tr
-                        key={ecu.id}
-                        id={`ecu-row-desktop-${ecu.id}`}
-                        className={`transition-all duration-300 ${
-                          isExactMatched
-                            ? 'bg-violet-100/90 ring-2 ring-violet-500 ring-inset shadow-md font-semibold'
-                            : 'hover:bg-violet-50/30 group'
-                        }`}
-                      >
-                        <td className="px-5 py-3.5">
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <p className="font-semibold text-slate-700">{ecu.name}</p>
-                              {isExactMatched && (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-violet-600 text-white shadow-sm animate-pulse">
-                                  <Scan size={12} />
-                                  مطابقة تامة
-                                </span>
-                              )}
-                            </div>
-                            {ecu.symbols_codes && (
-                              <p className="text-xs text-slate-400 font-mono">{ecu.symbols_codes}</p>
-                            )}
-                            {ecu.notes && (
-                              <p className="text-xs text-slate-400 mt-0.5 max-w-[200px] truncate" title={ecu.notes}>
-                                📝 {ecu.notes}
-                              </p>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3.5">
-                          <ClassificationBadges ecu={ecu} />
-                        </td>
-                        <td className="px-4 py-3.5 font-mono text-xs">
-                          {ecu.barcode ? (
-                            <button
-                              type="button"
-                              onClick={() => copyBarcode(ecu.barcode)}
-                              className={`flex items-center gap-1 px-2 py-0.5 rounded border transition-colors ${
-                                isExactMatched
-                                  ? 'text-violet-700 font-bold bg-white border-violet-300'
-                                  : 'text-slate-600 hover:text-violet-700 border-transparent hover:border-slate-200'
-                              }`}
-                              title="اضغط للنسخ"
-                            >
-                              <span>{ecu.barcode}</span>
-                              <Copy size={11} className="text-slate-400" />
-                            </button>
-                          ) : (
-                            <span className="text-slate-300">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-center">
-                          {ecu.shelf_location ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200">
-                              <MapPin size={11} className="text-violet-500 shrink-0" />
-                              {ecu.shelf_location}
-                            </span>
-                          ) : (
-                            <span className="text-slate-300 text-xs">—</span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3.5 text-center">
-                          {getStockBadge(ecu)}
-                        </td>
-                        {isAdmin && (
-                          <td className="px-4 py-3.5 text-left text-slate-500">
-                            {formatCurrency(ecu.purchase_price)}
-                          </td>
-                        )}
-                        <td className="px-4 py-3.5 text-left font-semibold text-emerald-600">
-                          {formatCurrency(ecu.selling_price)}
-                        </td>
-                        {isAdmin && (
-                          <td className="px-4 py-3.5">
-                            <InventoryActions ecuId={ecu.id} />
-                          </td>
-                        )}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-              {!filteredEcus.length && (
-                <div className="py-16 text-center text-slate-400">
-                  لا توجد أصناف مطابقة لخيارات البحث المحددة
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Mobile Cards (shown only on mobile) */}
-          <div className="md:hidden space-y-3">
-            {filteredEcus.length === 0 && (
-              <div className="soft-card py-12 text-center text-slate-400 text-sm">
-                لا توجد أصناف مطابقة لخيارات البحث المحددة
-              </div>
-            )}
-            {filteredEcus.map((ecu: any) => {
-              const isExactMatched = exactBarcodeMatch?.id === ecu.id
-              return (
-                <div
-                  key={ecu.id}
-                  id={`ecu-row-mobile-${ecu.id}`}
-                  className={`soft-card p-4 space-y-3 transition-all duration-300 ${
-                    isExactMatched ? 'ring-2 ring-violet-500 bg-violet-50/70 shadow-md' : ''
-                  }`}
-                >
-                  {/* Top row: name + stock badge */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-bold text-slate-800 text-sm leading-snug">{ecu.name}</p>
-                        {isExactMatched && (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-600 text-white shadow-sm animate-pulse">
-                            <Scan size={10} />
-                            مطابقة تامة
-                          </span>
-                        )}
-                      </div>
-                      {ecu.symbols_codes && (
-                        <p className="text-xs text-slate-400 font-mono mt-0.5 truncate">{ecu.symbols_codes}</p>
-                      )}
-                    </div>
-                    <div className="shrink-0">{getStockBadge(ecu)}</div>
-                  </div>
-
-                  {/* Classification breadcrumb */}
-                  <ClassificationBadges ecu={ecu} />
-
-                  {/* Meta row */}
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                    {ecu.barcode && (
-                      <button
-                        type="button"
-                        onClick={() => copyBarcode(ecu.barcode)}
-                        className={`font-mono flex items-center gap-1 ${
-                          isExactMatched ? 'font-bold text-violet-700 bg-white px-2 py-0.5 rounded border border-violet-200' : ''
-                        }`}
-                      >
-                        📦 {ecu.barcode}
-                        <Copy size={10} className="text-slate-400" />
-                      </button>
-                    )}
-                    {ecu.shelf_location && (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-violet-50 text-violet-700 border border-violet-200 font-semibold text-xs">
-                        <MapPin size={10} className="text-violet-500 shrink-0" />
-                        {ecu.shelf_location}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Notes */}
-                  {ecu.notes && (
-                    <p className="text-xs text-slate-500 bg-slate-50 rounded-xl px-3 py-2 border border-slate-100">
-                      📝 {ecu.notes}
-                    </p>
-                  )}
-
-                  {/* Prices row */}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100">
-                    <div className="flex items-center gap-3 text-xs">
-                      {isAdmin && (
-                        <span className="text-slate-500">
-                          شراء:{' '}
-                          <span className="font-semibold text-slate-700">
-                            {formatCurrency(ecu.purchase_price)}
-                          </span>
-                        </span>
-                      )}
-                      <span className="text-emerald-600">
-                        بيع:{' '}
-                        <span className="font-bold">{formatCurrency(ecu.selling_price)}</span>
-                      </span>
-                    </div>
-                    {isAdmin && <InventoryActions ecuId={ecu.id} />}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </>
-      )}
     </div>
   )
 }

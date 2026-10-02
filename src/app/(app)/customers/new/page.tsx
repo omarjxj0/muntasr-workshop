@@ -13,7 +13,7 @@ function NewCustomerPageInner() {
   const initialPhone = searchParams.get('phone') || ''
   
   const [newCustomer, setNewCustomer] = useState({ name: '', phone: initialPhone, address: '' })
-  const [newVehicle, setNewVehicle] = useState({ license_plate: '', make_and_model: '', chassis_number_vin: '' })
+  const [newVehicle, setNewVehicle] = useState({ make_and_model: '', chassis_number_vin: '', complaint: '' })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const supabase = createClient()
 
@@ -29,55 +29,99 @@ function NewCustomerPageInner() {
     const name = newCustomer.name.trim()
     const phone = newCustomer.phone.trim()
     const address = newCustomer.address.trim()
+    const makeAndModel = newVehicle.make_and_model.trim()
+    const vin = newVehicle.chassis_number_vin.trim()
+    const complaint = newVehicle.complaint.trim()
 
     if (!name || !phone) {
       toast.error('يرجى إدخال اسم ورقم هاتف الزبون')
       return
     }
 
+    if (!makeAndModel) {
+      toast.error('يرجى إدخال نوع وموديل السيارة (مثال: سنتافي 2018)')
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
-      const { data: customer, error: custError } = await supabase
+      // 1. Check if customer already exists by phone
+      let customerId: string | null = null
+      const { data: existingCust } = await supabase
         .from('customers')
-        .insert({ 
-          name, 
-          phone, 
-          address: address || null 
+        .select('id')
+        .eq('phone', phone)
+        .maybeSingle()
+
+      if (existingCust?.id) {
+        customerId = existingCust.id
+        await supabase
+          .from('customers')
+          .update({ name, address: address || null } as any)
+          .eq('id', customerId)
+      } else {
+        const { data: customer, error: custError } = await supabase
+          .from('customers')
+          .insert({ 
+            name, 
+            phone, 
+            address: address || null 
+          } as any)
+          .select()
+          .single()
+
+        if (custError || !customer) {
+          console.error('Customer Insert Error:', custError)
+          toast.error(`فشل في تسجيل العميل: ${custError?.message || 'خطأ في حفظ البيانات'}`)
+          setIsSubmitting(false)
+          return
+        }
+        customerId = customer.id
+      }
+
+      // 2. Add vehicle (default license_plate to '—' to satisfy NOT NULL constraint)
+      const { data: vehicle, error: vehicleError } = await supabase
+        .from('vehicles')
+        .insert({
+          customer_id: customerId,
+          license_plate: '—',
+          make_and_model: makeAndModel,
+          chassis_number_vin: vin || null,
         } as any)
         .select()
         .single()
 
-      if (custError || !customer) {
-        console.error('Customer Insert Error:', custError)
-        toast.error(`فشل في تسجيل العميل: ${custError?.message || 'قد يكون رقم الهاتف مسجلاً مسبقاً'}`)
+      if (vehicleError || !vehicle) {
+        console.error('Vehicle Insert Error:', vehicleError)
+        toast.error(`حدث خطأ في إضافة المركبة: ${vehicleError?.message || 'فشل في الحفظ'}`)
         setIsSubmitting(false)
         return
       }
 
-      // Add vehicle if details provided
-      const makeAndModel = newVehicle.make_and_model.trim()
-      const licensePlate = newVehicle.license_plate.trim()
-      const vin = newVehicle.chassis_number_vin.trim()
-
-      if (makeAndModel && licensePlate) {
-        const { error: vehicleError } = await supabase.from('vehicles').insert({
-          customer_id: customer.id,
-          license_plate: licensePlate,
-          make_and_model: makeAndModel,
-          chassis_number_vin: vin || null,
+      // 3. Automatically open active visit in "زيارات نشطة"
+      const { data: visit, error: visitError } = await supabase
+        .from('visits')
+        .insert({
+          vehicle_id: vehicle.id,
+          status: 'In Progress',
+          complaint: complaint || 'فحص وصيانة عامة',
+          entry_date: new Date().toISOString(),
         } as any)
+        .select()
+        .single()
 
-        if (vehicleError) {
-          console.error('Vehicle Insert Error:', vehicleError)
-          toast.error(`تم تسجيل الزبون بنجاح، ولكن حدث خطأ في إضافة المركبة: ${vehicleError.message}`)
-        }
+      if (visitError || !visit) {
+        console.error('Visit Insert Error:', visitError)
+        toast.success('تم تسجيل الزبون والمركبة بنجاح')
+        router.push(`/customers/${customerId}`)
+        return
       }
 
-      toast.success('تم تسجيل الزبون بنجاح')
-      router.push(`/customers/${customer.id}`)
+      toast.success('تم تسجيل الزبون وفتح زيارة نشطة بنجاح 🚗')
+      router.push(`/visits/${visit.id}`)
     } catch (err: any) {
-      console.error('Unexpected Customer Registration Error:', err)
+      console.error('Unexpected Registration Error:', err)
       toast.error(`حدث خطأ غير متوقع: ${err?.message || err}`)
       setIsSubmitting(false)
     }
@@ -97,10 +141,15 @@ function NewCustomerPageInner() {
       </Link>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
-          <UserPlus size={28} className="text-violet-500" />
-          تسجيل زبون جديد
-        </h1>
+        <div>
+          <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
+            <UserPlus size={28} className="text-violet-500" />
+            تسجيل سريع وفتح زيارة
+          </h1>
+          <p className="text-xs text-slate-400 mt-1">
+            تسجيل بيانات الزبون والسيارة وفتح زيارة في &quot;زيارات نشطة&quot; بضغطة واحدة
+          </p>
+        </div>
       </div>
 
       <form onSubmit={handleRegisterCustomer} className="soft-card p-6 md:p-8 space-y-6 animate-fade-up">
@@ -149,35 +198,38 @@ function NewCustomerPageInner() {
         <div className="border-t border-slate-100 pt-6">
           <p className="text-sm text-slate-800 mb-4 font-bold flex items-center gap-2">
             <Car size={16} className="text-violet-500" />
-            بيانات المركبة الأولى (اختياري)
+            بيانات المركبة والزيارة
           </p>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm text-slate-600 mb-2 font-medium">نوع السيارة والموديل</label>
+            <div className="md:col-span-2">
+              <label className="block text-sm text-slate-700 mb-2 font-semibold">
+                نوع وموديل السيارة *
+              </label>
               <input 
+                required
                 value={newVehicle.make_and_model} 
                 onChange={e => setNewVehicle(p => ({ ...p, make_and_model: e.target.value }))}
-                placeholder="مثال: تويوتا كامري 2020"
+                placeholder="مثال: سنتافي 2018 أو كيا سبورتاج 2015"
                 className={inputClass} 
               />
             </div>
             <div>
-              <label className="block text-sm text-slate-600 mb-2 font-medium">رقم اللوحة</label>
-              <input 
-                value={newVehicle.license_plate} 
-                onChange={e => setNewVehicle(p => ({ ...p, license_plate: e.target.value }))}
-                placeholder="مثال: بغداد 12345"
-                className={`${inputClass} font-mono`} 
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-sm text-slate-600 mb-2 font-medium">رقم الشاسيه (VIN)</label>
+              <label className="block text-sm text-slate-600 mb-2 font-medium">رقم الشاسيه (VIN) (اختياري)</label>
               <input 
                 value={newVehicle.chassis_number_vin} 
                 onChange={e => setNewVehicle(p => ({ ...p, chassis_number_vin: e.target.value }))}
                 placeholder="رقم الشاسيه"
                 className={`${inputClass} font-mono`} 
                 dir="ltr"
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-slate-600 mb-2 font-medium">الشكوى أو العطل المبدئي</label>
+              <input 
+                value={newVehicle.complaint} 
+                onChange={e => setNewVehicle(p => ({ ...p, complaint: e.target.value }))}
+                placeholder="مثال: برمجة عقل محرك، فحص كهرباء..."
+                className={inputClass} 
               />
             </div>
           </div>
@@ -194,10 +246,11 @@ function NewCustomerPageInner() {
           <button 
             type="submit"
             disabled={isSubmitting}
-            className="px-8 py-3 rounded-2xl text-base font-bold text-white transition-all disabled:opacity-70"
+            className="px-8 py-3 rounded-2xl text-base font-bold text-white transition-all disabled:opacity-70 flex items-center gap-2"
             style={{ background: 'linear-gradient(135deg, #7c3aed, #ec4899)', boxShadow: '0 4px 15px rgba(124,58,237,0.35)' }}
           >
-            {isSubmitting ? 'جاري التسجيل...' : 'تسجيل وحفظ الزبون'}
+            <Car size={18} />
+            {isSubmitting ? 'جاري التسجيل وفتح الزيارة...' : 'تسجيل وفتح زيارة نشطة'}
           </button>
         </div>
       </form>

@@ -6,15 +6,13 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Format currency in Iraqi Dinar (IQD)
-export function formatCurrency(amount: number | string): string {
+// Format currency in standard Iraqi Dinar (IQD X,XXX)
+export function formatCurrency(amount: number | string | null | undefined): string {
   const num = typeof amount === 'string' ? parseAmount(amount) : Number(amount) || 0
   const safe = Object.is(num, -0) ? 0 : Math.round(num)
-  return new Intl.NumberFormat('ar-IQ', {
-    style: 'currency',
-    currency: 'IQD',
-    maximumFractionDigits: 0,
-  }).format(safe)
+  const isNegative = safe < 0
+  const absFormatted = Math.abs(safe).toLocaleString('en-US')
+  return isNegative ? `-IQD ${absFormatted}` : `IQD ${absFormatted}`
 }
 
 // Replaces Eastern Arabic numerals (٠-٩) with standard digits (0-9)

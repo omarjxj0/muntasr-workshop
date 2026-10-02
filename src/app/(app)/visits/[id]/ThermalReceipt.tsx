@@ -52,10 +52,12 @@ export default function ThermalReceipt({ visit, vehicle, customer, parts }: Ther
           <span>المركبة:</span>
           <span>{vehicle.make_and_model}</span>
         </div>
-        <div className="flex justify-between">
-          <span>الرقم:</span>
-          <span className="font-mono">{vehicle.license_plate}</span>
-        </div>
+        {vehicle.license_plate && vehicle.license_plate !== '—' && vehicle.license_plate !== '-' && (
+          <div className="flex justify-between">
+            <span>الرقم:</span>
+            <span className="font-mono">{vehicle.license_plate}</span>
+          </div>
+        )}
       </div>
 
       <div className="border-t border-dashed border-gray-400 my-2"></div>
@@ -78,7 +80,7 @@ export default function ThermalReceipt({ visit, vehicle, customer, parts }: Ther
 
       {/* Parts Table */}
       <div className="text-xs">
-        <div className="font-bold mb-1">المواد المضافة:</div>
+        <div className="font-bold mb-1">المواد والقطع المركبة:</div>
         {parts.length === 0 ? (
           <p className="text-gray-500">لا توجد مواد</p>
         ) : (
@@ -86,16 +88,14 @@ export default function ThermalReceipt({ visit, vehicle, customer, parts }: Ther
             <thead>
               <tr className="border-b border-gray-200">
                 <th className="text-right font-normal pb-1">المادة</th>
-                <th className="text-center font-normal pb-1 w-10">العدد</th>
-                <th className="text-left font-normal pb-1 w-16">السعر</th>
+                <th className="text-left font-normal pb-1 w-16">العدد</th>
               </tr>
             </thead>
             <tbody>
               {parts.map(p => (
                 <tr key={p.id} className="border-b border-gray-100">
                   <td className="py-1 pr-1">{p.ecus?.name || 'مادة غير معروفة'}</td>
-                  <td className="py-1 text-center font-mono">{p.quantity}</td>
-                  <td className="py-1 pl-1 text-left font-mono">{formatCurrency(p.selling_price_at_time * p.quantity)}</td>
+                  <td className="py-1 text-left font-mono">{p.quantity}</td>
                 </tr>
               ))}
             </tbody>
@@ -107,17 +107,9 @@ export default function ThermalReceipt({ visit, vehicle, customer, parts }: Ther
 
       {/* Totals */}
       <div className="space-y-1 text-xs">
-        <div className="flex justify-between">
-          <span>سعر المواد:</span>
-          <span className="font-mono">{formatCurrency(visit.total_amount || 0)}</span>
-        </div>
-        <div className="flex justify-between">
-          <span>أجور العمل:</span>
-          <span className="font-mono">{formatCurrency(visit.labor_cost || 0)}</span>
-        </div>
         <div className="flex justify-between font-bold text-base mt-2 pt-2 border-t border-gray-200">
-          <span>السعر الكلي:</span>
-          <span className="font-mono">{formatCurrency(grandTotal)}</span>
+          <span>أجور العمل والحساب:</span>
+          <span className="font-mono">{formatCurrency(visit.labor_cost || 0)}</span>
         </div>
       </div>
 

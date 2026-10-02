@@ -85,24 +85,33 @@ export default async function VisitsPage({
         </div>
       ) : (
         <div className="space-y-3">
-          {visits.map((visit: any) => {
+          {visits.map((visit: any, index: number) => {
             const grandTotal = (visit.total_amount ?? 0) + (visit.labor_cost ?? 0)
+            const hasPlate = visit.vehicles?.license_plate && !['—', '-', ''].includes(visit.vehicles.license_plate.trim())
+
             return (
               <Link
                 key={visit.id}
                 href={`/visits/${visit.id}`}
                 className="soft-card p-5 flex items-center justify-between hover:shadow-[0_8px_30px_rgba(124,58,237,0.15)] transition-all duration-200 block group"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 min-w-0">
+                  {/* Sequential counter */}
+                  <span className="font-mono text-xs font-bold text-violet-700 bg-violet-50 border border-violet-200/80 px-2 py-1 rounded-lg shrink-0">
+                    #{index + 1}
+                  </span>
+
                   <div className="w-12 h-12 rounded-2xl bg-violet-50 border-2 border-violet-100 flex items-center justify-center shrink-0">
                     <Car size={22} className="text-violet-500" />
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1 min-w-0">
                     <p className="font-semibold text-slate-700 group-hover:text-violet-700 transition-colors">
                       {visit.vehicles?.make_and_model ?? 'مركبة'}
-                      <span className="font-mono text-sm mr-2 text-slate-400">
-                        {visit.vehicles?.license_plate}
-                      </span>
+                      {hasPlate && (
+                        <span className="font-mono text-sm mr-2 text-slate-400">
+                          {visit.vehicles?.license_plate}
+                        </span>
+                      )}
                     </p>
                     <p className="text-sm text-slate-500">
                       {visit.vehicles?.customers?.name} · {visit.vehicles?.customers?.phone}
@@ -113,7 +122,7 @@ export default async function VisitsPage({
                     <p className="text-xs text-slate-400">{formatDate(visit.entry_date)}</p>
                   </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
+                <div className="flex flex-col items-end gap-2 shrink-0">
                   <StatusBadge status={visit.status} />
                   <p className="font-bold text-emerald-600">{formatCurrency(grandTotal)}</p>
                 </div>

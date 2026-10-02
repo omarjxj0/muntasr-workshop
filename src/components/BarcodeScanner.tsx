@@ -47,7 +47,7 @@ export default function BarcodeScanner({ visitId, onPartAdded }: BarcodeScannerP
           visit_id: visitId,
           ecu_id: ecu.id,
           quantity: 1,
-          selling_price_at_time: ecu.selling_price,
+          selling_price_at_time: 0,
         } as any)
       if (error) { toast.error('فشل في إضافة القطعة'); return }
     }

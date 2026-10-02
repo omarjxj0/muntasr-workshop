@@ -11,23 +11,21 @@ interface DashboardAnalyticsProps {
   income: number
   wages: number
   expenses: number
-  ecuCosts?: number
   topVehicleMakes: { name: string; count: number }[]
 }
 
-export default function DashboardAnalytics({ income, wages, expenses, ecuCosts = 0, topVehicleMakes }: DashboardAnalyticsProps) {
+export default function DashboardAnalytics({ income, wages, expenses, topVehicleMakes }: DashboardAnalyticsProps) {
   
   const financialData = useMemo(() => {
-    const totalOutflows = wages + expenses + ecuCosts
+    const totalOutflows = wages + expenses
     const profit = Math.max(0, income - totalOutflows)
     
     return [
       { name: 'صافي الربح', value: profit, color: '#10b981' }, // Emerald
       { name: 'رواتب وأجور', value: wages, color: '#f59e0b' }, // Amber
-      { name: 'تكلفة العقول والمخزون', value: ecuCosts, color: '#6366f1' }, // Indigo
       { name: 'مصروفات تشغيلية', value: expenses, color: '#f43f5e' }, // Rose
     ].filter(d => d.value > 0)
-  }, [income, wages, expenses, ecuCosts])
+  }, [income, wages, expenses])
 
   return (
     <div className="grid lg:grid-cols-2 gap-6">

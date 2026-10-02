@@ -8,27 +8,27 @@ import toast from 'react-hot-toast'
 
 export default function AddVehicleForm({ customerId }: { customerId: string }) {
   const [open, setOpen] = useState(false)
-  const [form, setForm] = useState({ license_plate: '', make_and_model: '', chassis_number_vin: '' })
+  const [form, setForm] = useState({ make_and_model: '', chassis_number_vin: '' })
   const [loading, setLoading] = useState(false)
   const router = useRouter()
   const supabase = createClient()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!form.license_plate || !form.make_and_model) return
+    if (!form.make_and_model.trim()) return
     setLoading(true)
 
     const { error } = await supabase.from('vehicles').insert({
       customer_id: customerId,
-      license_plate: form.license_plate,
-      make_and_model: form.make_and_model,
-      chassis_number_vin: form.chassis_number_vin || null,
+      license_plate: '—',
+      make_and_model: form.make_and_model.trim(),
+      chassis_number_vin: form.chassis_number_vin.trim() || null,
     })
 
     if (error) { toast.error('فشل في إضافة المركبة'); setLoading(false); return }
     toast.success('تم إضافة المركبة')
     setOpen(false)
-    setForm({ license_plate: '', make_and_model: '', chassis_number_vin: '' })
+    setForm({ make_and_model: '', chassis_number_vin: '' })
     router.refresh()
     setLoading(false)
   }
@@ -52,30 +52,24 @@ export default function AddVehicleForm({ customerId }: { customerId: string }) {
     <form onSubmit={handleSubmit} className="soft-card p-5 space-y-4 border-2 border-violet-100">
       <h3 className="font-semibold text-slate-700">إضافة مركبة</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label className={labelClass}>نوع السيارة *</label>
+        <div className="col-span-1 md:col-span-2">
+          <label className={labelClass}>نوع السيارة والموديل *</label>
           <input
             required
+            placeholder="مثال: سنتافي 2018 أو كيا سبورتاج 2015"
             value={form.make_and_model}
             onChange={e => setForm(p => ({ ...p, make_and_model: e.target.value }))}
             className={inputClass}
           />
         </div>
-        <div>
-          <label className={labelClass}>رقم اللوحة *</label>
-          <input
-            required
-            value={form.license_plate}
-            onChange={e => setForm(p => ({ ...p, license_plate: e.target.value }))}
-            className={`${inputClass} font-mono`}
-          />
-        </div>
         <div className="col-span-1 md:col-span-2">
-          <label className={labelClass}>رقم الشاسيه (VIN)</label>
+          <label className={labelClass}>رقم الشاسيه (VIN) (اختياري)</label>
           <input
+            placeholder="رقم الشاسيه"
             value={form.chassis_number_vin}
             onChange={e => setForm(p => ({ ...p, chassis_number_vin: e.target.value }))}
             className={`${inputClass} font-mono`}
+            dir="ltr"
           />
         </div>
       </div>

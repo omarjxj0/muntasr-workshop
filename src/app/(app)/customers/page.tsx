@@ -15,7 +15,7 @@ export default async function CustomersPage({
     .from('customers')
     .select(`
       *,
-      vehicles ( id )
+      vehicles ( id, make_and_model )
     `)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -48,7 +48,7 @@ export default async function CustomersPage({
           }}
         >
           <Plus size={18} />
-          إضافة زبون جديد
+          تسجيل زبون وفتح زيارة
         </Link>
       </div>
 
@@ -84,47 +84,67 @@ export default async function CustomersPage({
         </div>
       ) : (
         <div className="space-y-3">
-          {customers.map((customer: any) => (
-            <Link
-              key={customer.id}
-              href={`/customers/${customer.id}`}
-              className="soft-card p-5 flex items-center justify-between group transition-all duration-200 hover:shadow-[0_8px_30px_rgba(124,58,237,0.15)] block"
-            >
-              <div className="flex items-center gap-4">
-                {/* Avatar */}
-                <div className="w-12 h-12 rounded-2xl bg-violet-50 border-2 border-violet-100 flex items-center justify-center shrink-0 font-bold text-lg text-violet-600">
-                  {customer.name.charAt(0)}
-                </div>
+          {customers.map((customer: any, index: number) => {
+            const carsList = (customer.vehicles as any[])
+              ?.map(v => v.make_and_model)
+              .filter(Boolean)
+            const carDisplay = carsList && carsList.length > 0 ? carsList.join(' ، ') : null
 
-                <div className="space-y-1">
-                  <p className="font-semibold text-slate-700 text-base group-hover:text-violet-700 transition-colors">
-                    {customer.name}
-                  </p>
-                  <p className="flex items-center gap-1.5 text-sm font-mono text-slate-500">
-                    <Phone size={12} />
-                    {customer.phone}
-                  </p>
-                  {customer.address && (
-                    <p className="flex items-center gap-1.5 text-xs text-slate-400">
-                      <MapPin size={11} />
-                      {customer.address}
+            return (
+              <Link
+                key={customer.id}
+                href={`/customers/${customer.id}`}
+                className="soft-card p-5 flex items-center justify-between group transition-all duration-200 hover:shadow-[0_8px_30px_rgba(124,58,237,0.15)] block"
+              >
+                <div className="flex items-center gap-4 min-w-0">
+                  {/* Counter */}
+                  <span className="font-mono text-xs font-bold text-violet-700 bg-violet-50 border border-violet-200/80 px-2 py-1 rounded-lg shrink-0">
+                    #{index + 1}
+                  </span>
+
+                  {/* Avatar */}
+                  <div className="w-12 h-12 rounded-2xl bg-violet-50 border-2 border-violet-100 flex items-center justify-center shrink-0 font-bold text-lg text-violet-600">
+                    {customer.name.charAt(0)}
+                  </div>
+
+                  <div className="space-y-1.5 min-w-0">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <p className="font-bold text-slate-800 text-base group-hover:text-violet-700 transition-colors">
+                        {customer.name}
+                      </p>
+                      {carDisplay && (
+                        <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-bold bg-violet-100 text-violet-800 border border-violet-200/80 shrink-0">
+                          <Car size={13} className="text-violet-600" />
+                          {carDisplay}
+                        </span>
+                      )}
+                    </div>
+                    <p className="flex items-center gap-1.5 text-sm font-mono text-slate-500">
+                      <Phone size={12} />
+                      {customer.phone}
                     </p>
-                  )}
-                  <p className="text-xs text-slate-400">
-                    عميل منذ: {formatDate(customer.created_at)}
-                  </p>
+                    {customer.address && (
+                      <p className="flex items-center gap-1.5 text-xs text-slate-400">
+                        <MapPin size={11} />
+                        {customer.address}
+                      </p>
+                    )}
+                    <p className="text-xs text-slate-400">
+                      عميل منذ: {formatDate(customer.created_at)}
+                    </p>
+                  </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-3">
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm bg-violet-50 text-violet-600 border border-violet-100">
-                  <Car size={14} />
-                  <span>{(customer.vehicles as any[])?.length ?? 0} مركبة</span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-sm bg-violet-50 text-violet-600 border border-violet-100">
+                    <Car size={14} />
+                    <span>{(customer.vehicles as any[])?.length ?? 0} مركبة</span>
+                  </div>
+                  <ChevronLeft size={18} className="text-slate-400 group-hover:text-violet-600 transition-colors" />
                 </div>
-                <ChevronLeft size={18} className="text-slate-400" />
-              </div>
-            </Link>
-          ))}
+              </Link>
+            )
+          })}
         </div>
       )}
     </div>

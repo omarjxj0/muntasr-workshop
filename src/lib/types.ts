@@ -139,7 +139,7 @@ export interface QuickInspection {
   phone: string | null
   subject: string | null        // car model or ECU type
   fault_codes: string | null
-  image_paths: ImageEntry[]
+  image_paths: ImageEntry[] | string[]
   inspection_fee: number
   notes: string | null
   created_by: string | null
@@ -244,7 +244,7 @@ export type Database = {
       employees:          { Row: Employee;        Insert: Omit<Employee, 'id'>;          Update: Partial<Omit<Employee, 'id'>> }
       daily_wages:        { Row: DailyWage;       Insert: Omit<DailyWage, 'id'>;        Update: Partial<Omit<DailyWage, 'id'>> }
       transactions:       { Row: Transaction;     Insert: Omit<Transaction, 'id'>;      Update: Partial<Omit<Transaction, 'id'>> }
-      quick_inspections:  { Row: QuickInspection; Insert: Omit<QuickInspection, 'id' | 'created_at' | 'updated_at'>; Update: Partial<Omit<QuickInspection, 'id'>> }
+      quick_inspections:  { Row: QuickInspection; Insert: Omit<QuickInspection, 'id' | 'created_at' | 'updated_at'> & { id?: string; image_paths?: ImageEntry[] | string[] | string }; Update: Partial<Omit<QuickInspection, 'id'>> & { image_paths?: ImageEntry[] | string[] | string } }
     }
     Views: Record<string, never>
     Functions: Record<string, never>
