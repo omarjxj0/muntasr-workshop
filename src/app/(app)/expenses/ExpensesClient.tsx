@@ -18,7 +18,12 @@ const CATEGORIES = ['أدوات', 'ضيافة', 'صيانة', 'أخرى']
 
 export default function ExpensesClient({ initialExpenses }: { initialExpenses: Expense[] }) {
   const supabase = createClient()
-  const [expenses, setExpenses] = useState<Expense[]>(initialExpenses)
+  const [expenses, setExpenses] = useState<Expense[]>(() =>
+    (initialExpenses || []).map(e => ({
+      ...e,
+      amount: Math.round(Number(e.amount) || 0),
+    }))
+  )
   const [filter, setFilter] = useState<'all' | 'today' | 'month'>('month')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -51,7 +56,7 @@ export default function ExpensesClient({ initialExpenses }: { initialExpenses: E
       console.error(error)
       toast.error('حدث خطأ أثناء إضافة المصروف')
     } else if (data) {
-      setExpenses([data, ...expenses])
+      setExpenses([{ ...(data as Expense), amount: Math.round(Number((data as any).amount) || 0) }, ...expenses])
       setAmount('')
       setDescription('')
       setCategory('أخرى')

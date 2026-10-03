@@ -38,7 +38,8 @@ export default function VisitDetailClient({ visitId, role }: Props) {
     if (data) {
       setVisit(data)
       setComplaint(data.complaint ?? '')
-      setLaborCostInput(data.labor_cost ? data.labor_cost.toString() : '')
+      const numericLabor = Number(data.labor_cost) || 0
+      setLaborCostInput(numericLabor > 0 ? Math.round(numericLabor).toString() : '')
     }
   }, [visitId, supabase])
 

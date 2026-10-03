@@ -22,18 +22,19 @@ export function parseArabicNumerals(val: string | number): string {
 }
 
 // Strict numeric parse — always use this before saving to Supabase or calculating totals
+// Guarantees clean integer values in IQD with NO implicit multipliers
 export function parseAmount(val: string | number | null | undefined): number {
   if (val == null) return 0
   if (typeof val === 'number') {
-    return isNaN(val) || !isFinite(val) ? 0 : (Object.is(val, -0) ? 0 : val)
+    return isNaN(val) || !isFinite(val) ? 0 : (Object.is(val, -0) ? 0 : Math.round(val))
   }
   const cleaned = parseArabicNumerals(val).replace(/,/g, '').trim()
   const n = parseFloat(cleaned)
-  return isNaN(n) || !isFinite(n) || n < 0 ? 0 : (Object.is(n, -0) ? 0 : n)
+  return isNaN(n) || !isFinite(n) || n < 0 ? 0 : (Object.is(n, -0) ? 0 : Math.round(n))
 }
 
 // Global handler for financial inputs on blur
-// No implicit multipliers — stores exactly what the user typed.
+// No implicit multipliers — stores exactly what the user typed as raw integer.
 export function handleFinancialBlur(val: string | number): number {
   return parseAmount(val)
 }

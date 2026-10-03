@@ -23,8 +23,8 @@ export default async function FinancesPage() {
 
   const transactions = (rawTransactions ?? []) as Transaction[]
 
-  const totalIncome  = transactions.filter(t => t.type === 'Income').reduce((s, t) => s + t.amount, 0)
-  const totalExpense = transactions.filter(t => t.type === 'Expense').reduce((s, t) => s + t.amount, 0)
+  const totalIncome  = transactions.filter(t => t.type === 'Income').reduce((s, t) => s + (Number(t.amount) || 0), 0)
+  const totalExpense = transactions.filter(t => t.type === 'Expense').reduce((s, t) => s + (Number(t.amount) || 0), 0)
   const netBalance   = totalIncome - totalExpense
 
   return (

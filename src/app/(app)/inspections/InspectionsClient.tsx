@@ -104,6 +104,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
     (initialRecords || []).map((r: any) => ({
       ...r,
       type: r.inspection_type || r.type || 'car',
+      inspection_fee: Math.round(Number(r.inspection_fee) || 0),
       image_paths: normalizeImagePaths(r.image_paths),
     }))
   )
@@ -228,12 +229,14 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
         setRecords(updatedList.map((r: any) => ({
           ...r,
           type: r.inspection_type || r.type || 'car',
+          inspection_fee: Math.round(Number(r.inspection_fee) || 0),
           image_paths: normalizeImagePaths(r.image_paths),
         })))
       } else if (data) {
         const newRecord: QuickInspection = {
           ...(data as any),
           type: (data as any).inspection_type || (data as any).type || 'car',
+          inspection_fee: Math.round(Number((data as any).inspection_fee) || 0),
           image_paths: normalizeImagePaths((data as any).image_paths),
         }
         setRecords(prev => [newRecord, ...prev])
