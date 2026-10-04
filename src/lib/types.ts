@@ -40,6 +40,8 @@ export interface Visit {
   total_amount: number
   labor_cost?: number
   technician_name?: string | null
+  delivered_at?: string | null
+  completed_at?: string | null
 }
 
 export interface EcuCompany {

@@ -73,9 +73,9 @@ export default function VisitDetailClient({ visitId, role }: Props) {
   }, [loadVisit, loadParts, loadVehicleAndCustomer])
 
   // 24-Hour Visit Auto-Lock:
-  // If status is 'Delivered' and >= 24 hours have passed since last update/delivery, lock all edits
+  // If status is 'Delivered' and >= 24 hours have passed since delivery, lock all edits
   const isDelivered = visit?.status === 'Delivered'
-  const deliveryTimestamp = new Date(visit?.updated_at || visit?.created_at || visit?.entry_date || 0).getTime()
+  const deliveryTimestamp = new Date(visit?.delivered_at || visit?.entry_date || 0).getTime()
   const hoursSinceDelivery = (Date.now() - deliveryTimestamp) / (1000 * 60 * 60)
   const isLocked = isDelivered && hoursSinceDelivery >= 24
 
@@ -84,7 +84,21 @@ export default function VisitDetailClient({ visitId, role }: Props) {
       toast.error('الزيارة مقفلة ومؤرشفة — لا يمكن تغيير حالتها')
       return
     }
-    const { error } = await supabase.from('visits').update({ status } as any).eq('id', visitId)
+    const now = new Date().toISOString()
+    const updatePayload: any = { status }
+
+    if (status === 'Delivered') {
+      updatePayload.delivered_at = now
+    } else if (status === 'Completed') {
+      updatePayload.completed_at = now
+      if (!visit?.delivered_at) {
+        updatePayload.delivered_at = now
+      }
+    } else {
+      updatePayload.delivered_at = null
+    }
+
+    const { error } = await supabase.from('visits').update(updatePayload).eq('id', visitId)
     if (error) { toast.error('فشل في تحديث الحالة'); return }
     toast.success('تم تحديث الحالة')
     loadVisit()
@@ -143,6 +157,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
     if (grandTotal <= 0) { toast.error('يرجى تحديد أتعاب العمل والبرمجة أولاً'); return }
 
     const desc = `أجور صيانة وبرمجة - ${customer?.name ?? ''} - ${vehicle?.make_and_model ?? ''}`
+    const now = new Date().toISOString()
 
     const { error } = await supabase.from('transactions').insert({
       type: 'Income',
@@ -150,10 +165,18 @@ export default function VisitDetailClient({ visitId, role }: Props) {
       reference_type: 'Visit_Payment',
       reference_id: visitId,
       description: desc,
+      date: now,
     } as any)
     if (error) { toast.error('فشل في تسجيل الدفعة'); return }
-    await supabase.from('visits').update({ status: 'Delivered', labor_cost: currentLabor } as any).eq('id', visitId)
-    toast.success('تم تسجيل الدفعة وتسليم السيارة 🎉')
+
+    await supabase.from('visits').update({
+      status: 'Delivered',
+      labor_cost: currentLabor,
+      delivered_at: now,
+      technician_name: technicianName || visit.technician_name || null,
+    } as any).eq('id', visitId)
+
+    toast.success('تم تسوية الحساب وتسليم السيارة بنجاح 🎉')
     loadVisit()
   }
 
@@ -257,7 +280,12 @@ export default function VisitDetailClient({ visitId, role }: Props) {
                   </p>
                 )}
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  <p className="text-slate-400 text-sm">{formatDate(visit.entry_date)}</p>
+                  <p className="text-slate-400 text-sm">تاريخ الدخول: {formatDate(visit.entry_date)}</p>
+                  {visit.delivered_at && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      تاريخ التسليم: {formatDate(visit.delivered_at)}
+                    </span>
+                  )}
                   {technicianName ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
                       <Wrench size={11} className="text-amber-600" />

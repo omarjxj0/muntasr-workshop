@@ -21,6 +21,8 @@ import type { VisitStatus, UserRole } from '@/lib/types'
 export interface DailyVisitItem {
   id: string
   entry_date: string
+  delivered_at?: string | null
+  completed_at?: string | null
   status: VisitStatus
   complaint: string | null
   labor_cost: number
@@ -87,28 +89,47 @@ export default function DailyShiftClient({ role, initialVisits, initialInspectio
 
     // 1. Visits
     for (const v of initialVisits) {
-      const grandTotal = (Number(v.labor_cost) || 0) + (Number(v.total_amount) || 0)
+      const isDeliveredOrCompleted = v.status === 'Completed' || v.status === 'Delivered'
+      // Overnight cars staying in the workshop contribute 0 cash today!
+      const grandTotal = isDeliveredOrCompleted
+        ? (Number(v.labor_cost) || 0) + (Number(v.total_amount) || 0)
+        : 0
+
       const hasPlate = v.vehicles?.license_plate && !['—', '-', ''].includes(v.vehicles.license_plate.trim())
       const plate = hasPlate ? v.vehicles?.license_plate ?? null : null
 
       let statusVariant: UnifiedOperation['statusVariant'] = 'info'
-      if (v.status === 'Completed' || v.status === 'Delivered') statusVariant = 'success'
-      else if (v.status === 'In Progress') statusVariant = 'warning'
-      else statusVariant = 'neutral'
+      let statusText = VISIT_STATUS_LABELS[v.status] || v.status
+      let kindLabel = 'زيارة صيانة'
+
+      if (isDeliveredOrCompleted) {
+        statusVariant = 'success'
+        kindLabel = v.status === 'Delivered' ? 'زيارة مسلّمة' : 'زيارة مكتملة'
+      } else if (v.status === 'In Progress') {
+        statusVariant = 'warning'
+        statusText = 'قيد العمل (بايتة)'
+        kindLabel = 'سيارة بايتة'
+      } else {
+        statusVariant = 'neutral'
+        statusText = 'قيد الانتظار (بايتة)'
+        kindLabel = 'سيارة بايتة'
+      }
+
+      const timestamp = (isDeliveredOrCompleted ? (v.delivered_at || v.completed_at) : null) || v.entry_date
 
       list.push({
         id: v.id,
         kind: 'visit',
-        kindLabel: 'زيارة صيانة',
+        kindLabel,
         customerName: v.vehicles?.customers?.name || 'زبون غير مسجل',
         customerPhone: v.vehicles?.customers?.phone || null,
         vehicleOrSubject: v.vehicles?.make_and_model || 'مركبة غير محددة',
         licensePlate: plate,
         technicianName: v.technician_name?.trim() || 'غير محدد',
         amount: grandTotal,
-        timestamp: v.entry_date,
-        timeFormatted: formatTimeBaghdad(v.entry_date),
-        statusText: VISIT_STATUS_LABELS[v.status] || v.status,
+        timestamp,
+        timeFormatted: formatTimeBaghdad(timestamp),
+        statusText,
         statusVariant,
         detailsHref: `/visits/${v.id}`,
         rawItem: v,
@@ -145,13 +166,26 @@ export default function DailyShiftClient({ role, initialVisits, initialInspectio
   const totalVisitsCount = initialVisits.length
   const totalInspectionsCount = initialInspections.length
 
-  // Grand Total Revenue collected / recorded today
+  const deliveredVisitsCount = useMemo(() => {
+    return initialVisits.filter(v => v.status === 'Completed' || v.status === 'Delivered').length
+  }, [initialVisits])
+
+  const overnightVisitsCount = useMemo(() => {
+    return initialVisits.filter(v => v.status === 'Pending' || v.status === 'In Progress').length
+  }, [initialVisits])
+
+  // Grand Total Revenue collected / recorded today (strictly delivered visits + inspection fees)
   const totalRevenueToday = useMemo(() => {
     return allOperations.reduce((sum, op) => sum + (op.amount || 0), 0)
   }, [allOperations])
 
   const visitsRevenueToday = useMemo(() => {
-    return initialVisits.reduce((sum, v) => sum + ((Number(v.labor_cost) || 0) + (Number(v.total_amount) || 0)), 0)
+    return initialVisits.reduce((sum, v) => {
+      if (v.status === 'Completed' || v.status === 'Delivered') {
+        return sum + ((Number(v.labor_cost) || 0) + (Number(v.total_amount) || 0))
+      }
+      return sum
+    }, 0)
   }, [initialVisits])
 
   const inspectionsRevenueToday = useMemo(() => {
@@ -331,7 +365,7 @@ export default function DailyShiftClient({ role, initialVisits, initialInspectio
           </div>
         </div>
 
-        {/* Card 3: Visits Count */}
+        {/* Card 3: Visits Count & Settlement */}
         <div className="soft-card p-5 relative overflow-hidden border-2 border-sky-100 hover:border-sky-300 transition-all shadow-sm">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2.5 py-1 rounded-full border border-sky-200">
@@ -342,13 +376,20 @@ export default function DailyShiftClient({ role, initialVisits, initialInspectio
             </div>
           </div>
           <div>
-            <p className="text-xs text-slate-400 font-medium">سيارات دخلت الصيانة اليوم</p>
+            <p className="text-xs text-slate-400 font-medium">سيارات مسلّمة اليوم</p>
             <p className="text-2xl sm:text-3xl font-extrabold text-sky-700 mt-1">
-              {totalVisitsCount} <span className="text-base font-normal text-slate-500">سيارة</span>
+              {deliveredVisitsCount} <span className="text-base font-normal text-slate-500">مسلّمة</span>
             </p>
-            <p className="text-[11px] text-slate-500 mt-2">
-              إجمالي إيراد الزيارات: <span className="font-semibold text-sky-800">{formatCurrency(visitsRevenueToday)}</span>
-            </p>
+            <div className="flex flex-col gap-0.5 text-[11px] text-slate-500 mt-2">
+              <p>
+                إيراد التسليم: <span className="font-semibold text-sky-800">{formatCurrency(visitsRevenueToday)}</span>
+              </p>
+              {overnightVisitsCount > 0 && (
+                <p className="text-amber-600 font-semibold">
+                  • {overnightVisitsCount} سيارة بايتة قيد العمل
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
@@ -650,8 +691,16 @@ export default function DailyShiftClient({ role, initialVisits, initialInspectio
                       </td>
 
                       {/* Amount IQD */}
-                      <td className="py-3.5 px-3 font-mono font-bold text-emerald-600 whitespace-nowrap">
-                        {op.amount > 0 ? formatCurrency(op.amount) : '—'}
+                      <td className="py-3.5 px-3 font-mono font-bold whitespace-nowrap">
+                        {isVisit && (op.rawItem as DailyVisitItem).status !== 'Completed' && (op.rawItem as DailyVisitItem).status !== 'Delivered' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                            بايتة (تُحصّل عند التسليم)
+                          </span>
+                        ) : op.amount > 0 ? (
+                          <span className="text-emerald-600 font-extrabold">{formatCurrency(op.amount)}</span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">0 IQD</span>
+                        )}
                       </td>
 
                       {/* Time */}

@@ -6,7 +6,7 @@ import {
   Stethoscope, Plus, Search, X, Car, Cpu, Phone,
   User, Image as ImageIcon, Upload, Trash2, ZoomIn,
   Calendar, DollarSign, AlertCircle, Printer,
-  StickyNote, CheckCircle2, Wrench,
+  StickyNote, CheckCircle2, Wrench, Pencil,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate, formatCurrency, parseAmount, parseArabicNumerals, cn } from '@/lib/utils'
@@ -114,6 +114,8 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
   )
   const [search, setSearch] = useState('')
   const [showModal, setShowModal] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<QuickInspection | null>(null)
+  const [existingImages, setExistingImages] = useState<ImageEntry[]>([])
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [imageFiles, setImageFiles] = useState<File[]>([])
   const [saving, setSaving] = useState(false)
@@ -170,7 +172,38 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
     setLightboxUrl(data.signedUrl)
   }
 
-  function resetModal() { setShowModal(false); setForm(EMPTY_FORM); setImageFiles([]) }
+  function openNewModal() {
+    setEditingRecord(null)
+    setForm(EMPTY_FORM)
+    setImageFiles([])
+    setExistingImages([])
+    setShowModal(true)
+  }
+
+  function openEditModal(record: QuickInspection) {
+    setEditingRecord(record)
+    setForm({
+      type: record.inspection_type || record.type || 'car',
+      customer_name: record.customer_name || '',
+      phone: record.phone || '',
+      subject: record.subject || record.car_info || record.ecu_info || '',
+      fault_codes: record.fault_codes || '',
+      inspection_fee: record.inspection_fee ? String(record.inspection_fee) : '',
+      notes: record.notes || '',
+      technician_name: record.technician_name || '',
+    })
+    setExistingImages(normalizeImagePaths(record.image_paths))
+    setImageFiles([])
+    setShowModal(true)
+  }
+
+  function resetModal() {
+    setShowModal(false)
+    setEditingRecord(null)
+    setForm(EMPTY_FORM)
+    setImageFiles([])
+    setExistingImages([])
+  }
 
   async function handleSave() {
     setSaving(true)
@@ -186,6 +219,12 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
         : []
 
       const uploadedImageUrls: string[] = uploadedImages.map(img => img.publicUrl).filter(Boolean)
+
+      // Combine existing kept images with newly uploaded images
+      const finalImagePaths: string[] = [
+        ...existingImages.map(img => img.path).filter(Boolean),
+        ...uploadedImageUrls,
+      ]
 
       const formData = {
         customer_name: form.customer_name,
@@ -212,23 +251,45 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
         inspection_fee: Number(formData.inspection_fee) || 0,
         cost: Number(formData.inspection_fee) || 0,
         notes: formData.notes?.trim() || null,
-        image_paths: Array.isArray(uploadedImageUrls) ? uploadedImageUrls : [],
-        status: 'completed'
+        image_paths: finalImagePaths,
+        status: editingRecord ? (editingRecord.status || 'completed') : 'completed',
       }
 
-      const { data, error } = await supabase
-        .from('quick_inspections')
-        .insert(cleanPayload as any)
-        .select()
-        .single()
+      let savedRecord: any = null
 
-      if (error) {
-        console.error('Quick Inspection Insert Error:', error)
-        toast.error('فشل في حفظ الفحص: ' + (error.message || 'خطأ في قاعدة البيانات'))
-        return
+      if (editingRecord) {
+        const { data, error } = await supabase
+          .from('quick_inspections')
+          .update(cleanPayload as any)
+          .eq('id', editingRecord.id)
+          .select()
+          .single()
+
+        if (error) {
+          console.error('Quick Inspection Update Error:', error)
+          toast.error('فشل في تعديل الفحص: ' + (error.message || 'خطأ في قاعدة البيانات'))
+          return
+        }
+
+        savedRecord = data
+        toast.success('تم تعديل بيانات الفحص بنجاح ✓')
+      } else {
+        const { data, error } = await supabase
+          .from('quick_inspections')
+          .insert(cleanPayload as any)
+          .select()
+          .single()
+
+        if (error) {
+          console.error('Quick Inspection Insert Error:', error)
+          toast.error('فشل في حفظ الفحص: ' + (error.message || 'خطأ في قاعدة البيانات'))
+          return
+        }
+
+        savedRecord = data
+        toast.success('تم حفظ الفحص بنجاح ✓')
       }
 
-      toast.success('تم حفظ الفحص بنجاح ✓')
       resetModal()
 
       // Immediately refresh the inspections list
@@ -245,15 +306,19 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
           inspection_fee: Math.round(Number(r.inspection_fee) || 0),
           image_paths: normalizeImagePaths(r.image_paths),
         })))
-      } else if (data) {
+      } else if (savedRecord) {
         const newRecord: QuickInspection = {
-          ...(data as any),
-          type: (data as any).inspection_type || (data as any).type || 'car',
-          technician_name: (data as any).technician_name || null,
-          inspection_fee: Math.round(Number((data as any).inspection_fee) || 0),
-          image_paths: normalizeImagePaths((data as any).image_paths),
+          ...savedRecord,
+          type: savedRecord.inspection_type || savedRecord.type || 'car',
+          technician_name: savedRecord.technician_name || null,
+          inspection_fee: Math.round(Number(savedRecord.inspection_fee) || 0),
+          image_paths: normalizeImagePaths(savedRecord.image_paths),
         }
-        setRecords(prev => [newRecord, ...prev])
+        if (editingRecord) {
+          setRecords(prev => prev.map(r => r.id === newRecord.id ? newRecord : r))
+        } else {
+          setRecords(prev => [newRecord, ...prev])
+        }
       }
 
       router.refresh()
@@ -537,7 +602,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
           </div>
           <p className="text-xs text-slate-400 mt-1">{records.length} فحص مسجّل • {carCount} سيارة • {ecuCount} عقل ECU</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-bold text-white shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 shrink-0" style={{ background: 'linear-gradient(135deg, #0d9488, #0f766e)', boxShadow: '0 8px 24px rgba(13,148,136,0.35)' }}>
+        <button onClick={openNewModal} className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl text-sm font-bold text-white shadow-lg transition-all duration-200 hover:scale-105 active:scale-95 shrink-0 cursor-pointer" style={{ background: 'linear-gradient(135deg, #0d9488, #0f766e)', boxShadow: '0 8px 24px rgba(13,148,136,0.35)' }}>
           <Plus size={18} /> + تسجيل فحص جديد
         </button>
       </div>
@@ -613,8 +678,22 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                   </div>
                   <div className="flex items-center gap-2 flex-wrap shrink-0 sm:flex-col sm:items-end sm:gap-1.5">
                     {record.inspection_fee > 0 && <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full text-[12px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200"><DollarSign size={11} /> {formatCurrency(record.inspection_fee)}</span>}
-                    {images.length > 0 && <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200"><ImageIcon size={10} /> {images.length} صورة</span>}
-                    {record.fault_codes && dtcBadges.length === 0 && <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200"><AlertCircle size={10} /> أعطال</span>}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {images.length > 0 && <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-200"><ImageIcon size={10} /> {images.length} صورة</span>}
+                      {record.fault_codes && dtcBadges.length === 0 && <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200"><AlertCircle size={10} /> أعطال</span>}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          openEditModal(record)
+                        }}
+                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 transition-all cursor-pointer shadow-xs"
+                        title="تعديل بيانات الفحص"
+                      >
+                        <Pencil size={12} />
+                        تعديل
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -667,11 +746,20 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                     )}
 
                     <div className="flex justify-between items-center pt-2 border-t border-slate-100 flex-wrap gap-2">
-                      <button onClick={() => handlePrint(record)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-all active:scale-95">
-                        <Printer size={15} /> طباعة التقرير
-                      </button>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button onClick={() => handlePrint(record)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-all active:scale-95 cursor-pointer">
+                          <Printer size={15} /> طباعة التقرير
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => openEditModal(record)}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-all active:scale-95 cursor-pointer"
+                        >
+                          <Pencil size={15} /> تعديل بيانات الفحص
+                        </button>
+                      </div>
                       {isAdmin && (
-                        <button onClick={() => handleDelete(record)} disabled={deletingId === record.id} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-600 hover:text-white transition-all active:scale-95 disabled:opacity-50">
+                        <button onClick={() => handleDelete(record)} disabled={deletingId === record.id} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-600 hover:text-white transition-all active:scale-95 disabled:opacity-50 cursor-pointer">
                           <Trash2 size={15} /> {deletingId === record.id ? 'جاري الحذف...' : 'حذف السجل'}
                         </button>
                       )}
@@ -691,10 +779,23 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
           <div className="relative w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-3xl shadow-2xl bg-white" style={{ boxShadow: '0 30px 80px rgba(13,148,136,0.25)' }}>
             <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-5 border-b border-slate-100 bg-white/95 backdrop-blur-sm rounded-t-3xl">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #0d9488, #0f766e)' }}><Plus size={18} className="text-white" /></div>
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center text-white"
+                  style={{
+                    background: editingRecord
+                      ? 'linear-gradient(135deg, #d97706, #b45309)'
+                      : 'linear-gradient(135deg, #0d9488, #0f766e)',
+                  }}
+                >
+                  {editingRecord ? <Pencil size={18} /> : <Plus size={18} />}
+                </div>
                 <div>
-                  <h2 className="font-bold text-slate-800 text-base">تسجيل فحص جديد</h2>
-                  <p className="text-[11px] text-slate-400">سجل بيانات الفحص السريع</p>
+                  <h2 className="font-bold text-slate-800 text-base">
+                    {editingRecord ? 'تعديل بيانات الفحص' : 'تسجيل فحص جديد'}
+                  </h2>
+                  <p className="text-[11px] text-slate-400">
+                    {editingRecord ? `تعديل سجل الفحص للزبون: ${editingRecord.customer_name}` : 'سجل بيانات الفحص السريع'}
+                  </p>
                 </div>
               </div>
               <button onClick={() => !saving && resetModal()} className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"><X size={18} /></button>
@@ -767,11 +868,44 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                   <div className="flex flex-wrap gap-1.5 mt-2">{parseFaultBadges(form.fault_codes).map(code => <FaultBadge key={code} code={code} />)}</div>
                 )}
               </div>
-              {/* Dropzone */}
-              <div>
-                <label className="block text-sm font-bold text-slate-700 mb-2">
+              {/* Dropzone & Images */}
+              <div className="space-y-3">
+                <label className="block text-sm font-bold text-slate-700">
                   <span className="flex items-center gap-1.5"><ImageIcon size={14} className="text-fuchsia-500" /> صور رموز الأعطال / العقل</span>
                 </label>
+
+                {/* Existing Images when editing */}
+                {existingImages.length > 0 && (
+                  <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-2">
+                    <p className="text-xs font-bold text-slate-600 flex items-center gap-1.5">
+                      <span>الصور المرفوعة حالياً في هذا الفحص ({existingImages.length}):</span>
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {existingImages.map((img, i) => (
+                        <span key={img.path || i} className="inline-flex items-center gap-1.5 pl-2 pr-1.5 py-1 rounded-xl text-xs font-medium border bg-white text-slate-700 border-slate-200 shadow-xs">
+                          <ImageIcon size={12} className="text-teal-600" />
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); openLightbox(img.path) }}
+                            className="hover:underline text-teal-700 max-w-[130px] truncate cursor-pointer font-semibold"
+                            title="معاينة الصورة"
+                          >
+                            {img.name || `صورة ${i + 1}`}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setExistingImages(prev => prev.filter((_, idx) => idx !== i))}
+                            className="p-1 rounded-full hover:bg-rose-100 hover:text-rose-600 text-slate-400 transition-colors mr-0.5 cursor-pointer"
+                            title="حذف هذه الصورة من الفحص"
+                          >
+                            <X size={12} />
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div
                   onDrop={handleDrop}
                   onDragOver={e => { e.preventDefault(); setDragOver(true) }}
@@ -782,7 +916,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                 >
                   <Upload size={24} className={cn('mx-auto mb-2', dragOver ? 'text-fuchsia-500' : 'text-slate-300')} />
                   <p className="text-sm text-slate-500 font-medium">اسحب وأفلت الصور هنا أو <span className="text-fuchsia-600 font-bold">انقر للتحديد</span></p>
-                  <p className="text-xs text-slate-400 mt-1">PNG، JPG، WEBP — يمكن رفع أكثر من صورة</p>
+                  <p className="text-xs text-slate-400 mt-1">PNG، JPG، WEBP — يمكن إضافة أو رفع صور جديدة</p>
                   <input ref={imageInputRef} type="file" accept="image/*" multiple className="hidden" onChange={e => setImageFiles(prev => mergeFiles(prev, e.target.files))} />
                 </div>
                 {imageFiles.length > 0 && (
@@ -843,8 +977,27 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
               {/* Submit */}
               <div className="flex justify-end gap-3 pt-2">
                 <button type="button" onClick={() => !saving && resetModal()} disabled={saving} className="px-5 py-3 rounded-2xl text-sm font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all disabled:opacity-50">إلغاء</button>
-                <button type="button" onClick={handleSave} disabled={saving} className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-60 disabled:scale-100" style={{ background: 'linear-gradient(135deg, #0d9488, #0f766e)', boxShadow: '0 8px 24px rgba(13,148,136,0.4)' }}>
-                  {saving ? (<><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> جاري الحفظ...</>) : (<><CheckCircle2 size={17} /> حفظ الفحص</>)}
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl text-sm font-bold text-white shadow-lg transition-all hover:scale-105 active:scale-95 disabled:opacity-60 disabled:scale-100 cursor-pointer"
+                  style={{
+                    background: editingRecord
+                      ? 'linear-gradient(135deg, #d97706, #b45309)'
+                      : 'linear-gradient(135deg, #0d9488, #0f766e)',
+                    boxShadow: editingRecord
+                      ? '0 8px 24px rgba(217,119,6,0.4)'
+                      : '0 8px 24px rgba(13,148,136,0.4)',
+                  }}
+                >
+                  {saving ? (
+                    <><span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" /> جاري الحفظ...</>
+                  ) : editingRecord ? (
+                    <><CheckCircle2 size={17} /> حفظ التعديلات</>
+                  ) : (
+                    <><CheckCircle2 size={17} /> حفظ الفحص</>
+                  )}
                 </button>
               </div>
             </div>

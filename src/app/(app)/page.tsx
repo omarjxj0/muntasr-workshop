@@ -56,7 +56,7 @@ export default async function DashboardPage() {
     { data: wagesData },
     { data: visitsWithVehicles },
   ] = await Promise.all([
-    supabase.from('visits').select('id, status, labor_cost, total_amount, entry_date'),
+    supabase.from('visits').select('id, status, labor_cost, total_amount, entry_date, delivered_at, completed_at'),
     supabase.from('quick_inspections').select('id, inspection_fee, created_at'),
     supabase.from('expenses').select('id, amount, created_at'),
     supabase.from('daily_wages').select('id, amount, date'),
@@ -73,7 +73,7 @@ export default async function DashboardPage() {
   const todayKey = `${nowBaghdadParts[0]}-${nowBaghdadParts[1]}-${nowBaghdadParts[2]}`
   const currentMonthKey = `${nowBaghdadParts[0]}-${nowBaghdadParts[1]}`
 
-  // 1. Completed Visits Revenue (status IN ('Completed', 'Delivered'))
+  // 1. Completed Visits Revenue settled on delivery date (delivered_at || completed_at || entry_date)
   let todayVisitsRev = 0
   let monthVisitsRev = 0
   let allVisitsRev = 0
@@ -81,7 +81,8 @@ export default async function DashboardPage() {
   for (const v of visitsData || []) {
     if (v.status === 'Completed' || v.status === 'Delivered') {
       const rev = (Number(v.labor_cost) || 0) + (Number(v.total_amount) || 0)
-      const { dayKey, monthKey } = getBaghdadDateKey(v.entry_date)
+      const settlementDate = (v as any).delivered_at || (v as any).completed_at || v.entry_date
+      const { dayKey, monthKey } = getBaghdadDateKey(settlementDate)
       if (dayKey === todayKey) todayVisitsRev += rev
       if (monthKey === currentMonthKey) monthVisitsRev += rev
       allVisitsRev += rev
