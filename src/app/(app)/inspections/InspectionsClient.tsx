@@ -6,10 +6,11 @@ import {
   Stethoscope, Plus, Search, X, Car, Cpu, Phone,
   User, Image as ImageIcon, Upload, Trash2, ZoomIn,
   Calendar, DollarSign, AlertCircle, Printer,
-  StickyNote, CheckCircle2,
+  StickyNote, CheckCircle2, Wrench,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { formatDate, formatCurrency, parseAmount, parseArabicNumerals, cn } from '@/lib/utils'
+import { TECHNICIANS } from '@/lib/constants'
 import toast from 'react-hot-toast'
 import type { QuickInspection, InspectionType, ImageEntry } from '@/lib/types'
 
@@ -70,11 +71,13 @@ interface Props { initialRecords: QuickInspection[]; isAdmin: boolean }
 interface FormState {
   type: InspectionType; customer_name: string; phone: string
   subject: string; fault_codes: string; inspection_fee: string; notes: string
+  technician_name: string
 }
 
 const EMPTY_FORM: FormState = {
   type: 'car', customer_name: '', phone: '', subject: '',
   fault_codes: '', inspection_fee: '', notes: '',
+  technician_name: '',
 }
 
 function TypeBadge({ type }: { type?: InspectionType }) {
@@ -104,6 +107,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
     (initialRecords || []).map((r: any) => ({
       ...r,
       type: r.inspection_type || r.type || 'car',
+      technician_name: r.technician_name || null,
       inspection_fee: Math.round(Number(r.inspection_fee) || 0),
       image_paths: normalizeImagePaths(r.image_paths),
     }))
@@ -171,6 +175,12 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
   async function handleSave() {
     setSaving(true)
     try {
+      if (!form.technician_name.trim()) {
+        toast.error('يرجى اختيار الفني المسؤول عن الفحص')
+        setSaving(false)
+        return
+      }
+
       const uploadedImages = imageFiles.length > 0
         ? await Promise.all(imageFiles.map(f => uploadImage(f, crypto.randomUUID())))
         : []
@@ -180,6 +190,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
       const formData = {
         customer_name: form.customer_name,
         phone: form.phone,
+        technician_name: form.technician_name?.trim() || null,
         inspection_type: form.type || 'car',
         car_info: form.type === 'car' ? (form.subject?.trim() || null) : null,
         ecu_info: form.type === 'ecu' ? (form.subject?.trim() || null) : null,
@@ -192,6 +203,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
       const cleanPayload = {
         customer_name: formData.customer_name?.trim() || 'زبون فحص',
         phone: formData.phone?.trim() || null,
+        technician_name: formData.technician_name,
         inspection_type: formData.inspection_type || 'car',
         car_info: formData.car_info?.trim() || null,
         ecu_info: formData.ecu_info?.trim() || null,
@@ -229,6 +241,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
         setRecords(updatedList.map((r: any) => ({
           ...r,
           type: r.inspection_type || r.type || 'car',
+          technician_name: r.technician_name || null,
           inspection_fee: Math.round(Number(r.inspection_fee) || 0),
           image_paths: normalizeImagePaths(r.image_paths),
         })))
@@ -236,6 +249,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
         const newRecord: QuickInspection = {
           ...(data as any),
           type: (data as any).inspection_type || (data as any).type || 'car',
+          technician_name: (data as any).technician_name || null,
           inspection_fee: Math.round(Number((data as any).inspection_fee) || 0),
           image_paths: normalizeImagePaths((data as any).image_paths),
         }
@@ -583,6 +597,11 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-slate-800 text-base">{record.customer_name}</span>
                         <TypeBadge type={record.type} />
+                        {record.technician_name && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                            🔧 الفني: {record.technician_name}
+                          </span>
+                        )}
                       </div>
                       {record.subject && <p className="text-sm text-slate-600 font-medium">{record.subject}</p>}
                       {dtcBadges.length > 0 && <div className="flex flex-wrap gap-1.5">{dtcBadges.map(code => <FaultBadge key={code} code={code} />)}</div>}
@@ -604,6 +623,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       {[
                         { label: record.type === 'car' ? 'نوع السيارة / الموديل' : 'نوع العقل / السيارة', value: record.subject, icon: record.type === 'car' ? <Car size={13} className="text-sky-500" /> : <Cpu size={13} className="text-violet-500" /> },
+                        { label: 'الفني المسؤول', value: record.technician_name ? `🔧 ${record.technician_name}` : 'غير محدد', icon: <Wrench size={13} className="text-amber-600" /> },
                         { label: 'رقم الهاتف', value: record.phone, icon: <Phone size={13} className="text-slate-400" /> },
                         { label: 'أجور الفحص', value: record.inspection_fee > 0 ? formatCurrency(record.inspection_fee) : null, icon: <DollarSign size={13} className="text-emerald-500" /> },
                       ].filter(f => f.value).map(f => (
@@ -694,7 +714,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                   </button>
                 </div>
               </div>
-              {/* Customer */}
+              {/* Customer & Technician */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
@@ -704,10 +724,25 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                 </div>
                 <div>
                   <label className="block text-sm font-bold text-slate-700 mb-1.5">
-                    <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400" /> رقم الهاتف (اختياري)</span>
+                    <span className="flex items-center gap-1.5"><Wrench size={14} className="text-teal-600" /> الفني المسؤول <span className="text-rose-400">*</span></span>
                   </label>
-                  <input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="07xxxxxxxxx" className={fieldCls} dir="ltr" />
+                  <select
+                    value={form.technician_name}
+                    onChange={e => setForm(f => ({ ...f, technician_name: e.target.value }))}
+                    className={fieldCls}
+                  >
+                    <option value="">-- اختر الفني المسؤول --</option>
+                    {TECHNICIANS.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
                 </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-1.5">
+                  <span className="flex items-center gap-1.5"><Phone size={14} className="text-slate-400" /> رقم الهاتف (اختياري)</span>
+                </label>
+                <input type="tel" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} placeholder="07xxxxxxxxx" className={fieldCls} dir="ltr" />
               </div>
               {/* Subject */}
               <div>

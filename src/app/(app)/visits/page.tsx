@@ -17,7 +17,7 @@ export default async function VisitsPage({
   let query = supabase
     .from('visits')
     .select(`
-      id, status, entry_date, complaint, total_amount, labor_cost,
+      id, status, entry_date, complaint, total_amount, labor_cost, technician_name,
       vehicles (
         make_and_model,
         license_plate,
@@ -105,14 +105,21 @@ export default async function VisitsPage({
                     <Car size={22} className="text-violet-500" />
                   </div>
                   <div className="space-y-1 min-w-0">
-                    <p className="font-semibold text-slate-700 group-hover:text-violet-700 transition-colors">
-                      {visit.vehicles?.make_and_model ?? 'مركبة'}
-                      {hasPlate && (
-                        <span className="font-mono text-sm mr-2 text-slate-400">
-                          {visit.vehicles?.license_plate}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-semibold text-slate-700 group-hover:text-violet-700 transition-colors">
+                        {visit.vehicles?.make_and_model ?? 'مركبة'}
+                        {hasPlate && (
+                          <span className="font-mono text-sm mr-2 text-slate-400">
+                            {visit.vehicles?.license_plate}
+                          </span>
+                        )}
+                      </p>
+                      {visit.technician_name && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                          🔧 الفني: {visit.technician_name}
                         </span>
                       )}
-                    </p>
+                    </div>
                     <p className="text-sm text-slate-500">
                       {visit.vehicles?.customers?.name} · {visit.vehicles?.customers?.phone}
                     </p>

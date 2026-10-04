@@ -2,13 +2,15 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, Wrench } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
+import { TECHNICIANS } from '@/lib/constants'
 import toast from 'react-hot-toast'
 
 export default function CreateVisitButton() {
   const [open, setOpen] = useState(false)
   const [phone, setPhone] = useState('')
+  const [technicianName, setTechnicianName] = useState('')
   const [loading, setLoading] = useState(false)
   const [vehicles, setVehicles] = useState<any[]>([])
   const [searched, setSearched] = useState(false)
@@ -31,7 +33,11 @@ export default function CreateVisitButton() {
   const handleCreate = async (vehicleId: string) => {
     const result = await supabase
       .from('visits')
-      .insert({ vehicle_id: vehicleId, complaint: '' } as any)
+      .insert({
+        vehicle_id: vehicleId,
+        complaint: '',
+        technician_name: technicianName || null,
+      } as any)
       .select()
       .single()
     const visit = result.data as any
@@ -66,6 +72,23 @@ export default function CreateVisitButton() {
             style={{ background: 'linear-gradient(135deg, #7c3aed, #ec4899)' }}>
             <Search size={18} />
           </button>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
+            <Wrench size={13} className="text-violet-500" />
+            الفني المسؤول
+          </label>
+          <select
+            value={technicianName}
+            onChange={e => setTechnicianName(e.target.value)}
+            className="w-full px-3 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-sm focus:outline-none focus:border-violet-400"
+          >
+            <option value="">-- اختر الفني المسؤول (اختياري) --</option>
+            {TECHNICIANS.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
         </div>
         {searched && vehicles.length === 0 && (
           <div className="text-center space-y-3 py-2 bg-slate-50 rounded-2xl p-4 border border-slate-100">

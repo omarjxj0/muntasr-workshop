@@ -3,6 +3,8 @@
 import { useSearchParams, useRouter } from 'next/navigation'
 import { Suspense, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { TECHNICIANS } from '@/lib/constants'
+import { Wrench } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 function NewVisitPageInner() {
@@ -11,6 +13,7 @@ function NewVisitPageInner() {
   const router = useRouter()
   const supabase = createClient()
   const [complaint, setComplaint] = useState('')
+  const [technicianName, setTechnicianName] = useState('')
   const [loading, setLoading] = useState(false)
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -19,7 +22,11 @@ function NewVisitPageInner() {
     setLoading(true)
     const result = await supabase
       .from('visits')
-      .insert({ vehicle_id: vehicleId, complaint } as any)
+      .insert({
+        vehicle_id: vehicleId,
+        complaint,
+        technician_name: technicianName || null,
+      } as any)
       .select()
       .single()
     const visit = result.data as any
@@ -48,6 +55,22 @@ function NewVisitPageInner() {
             <textarea value={complaint} onChange={e => setComplaint(e.target.value)}
               rows={4} placeholder="اكتب وصف المشكلة..."
               className="w-full px-4 py-3 rounded-xl bg-slate-50 text-slate-800 border border-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 resize-none transition-all focus:outline-none" />
+          </div>
+          <div>
+            <label className="block text-sm text-slate-600 mb-2 font-medium flex items-center gap-1.5">
+              <Wrench size={14} className="text-violet-500" />
+              الفني المسؤول
+            </label>
+            <select
+              value={technicianName}
+              onChange={e => setTechnicianName(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-slate-50 text-slate-800 border border-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-violet-500 transition-all focus:outline-none"
+            >
+              <option value="">-- اختر الفني المسؤول (اختياري) --</option>
+              {TECHNICIANS.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
           </div>
           <button type="submit" disabled={loading}
             className="w-full py-3 btn-gradient text-white rounded-xl font-bold transition-all disabled:opacity-60">

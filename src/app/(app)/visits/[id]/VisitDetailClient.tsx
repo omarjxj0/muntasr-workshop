@@ -6,9 +6,10 @@ import { createClient } from '@/lib/supabase/client'
 import BarcodeScanner from '@/components/BarcodeScanner'
 import StatusBadge from '@/components/StatusBadge'
 import {
-  Car, Phone, Trash2, DollarSign, FileText, ArrowRight, Scan, Package, Lock
+  Car, Phone, Trash2, DollarSign, FileText, ArrowRight, Scan, Package, Lock, Wrench
 } from 'lucide-react'
 import { formatDate, formatCurrency, VISIT_STATUS_LABELS, parseArabicNumerals, parseAmount } from '@/lib/utils'
+import { TECHNICIANS } from '@/lib/constants'
 import type { VisitStatus, UserRole } from '@/lib/types'
 import toast from 'react-hot-toast'
 import VoiceComplaintField from './VoiceComplaintField'
@@ -29,6 +30,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
   const [parts, setParts] = useState<any[]>([])
   const [complaint, setComplaint] = useState('')
   const [laborCostInput, setLaborCostInput] = useState('')
+  const [technicianName, setTechnicianName] = useState<string>('')
   const [saving, setSaving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
@@ -38,6 +40,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
     if (data) {
       setVisit(data)
       setComplaint(data.complaint ?? '')
+      setTechnicianName(data.technician_name ?? '')
       const numericLabor = Number(data.labor_cost) || 0
       setLaborCostInput(numericLabor > 0 ? Math.round(numericLabor).toString() : '')
     }
@@ -85,6 +88,21 @@ export default function VisitDetailClient({ visitId, role }: Props) {
     if (error) { toast.error('فشل في تحديث الحالة'); return }
     toast.success('تم تحديث الحالة')
     loadVisit()
+  }
+
+  const handleTechnicianChange = async (newTech: string) => {
+    if (isLocked) {
+      toast.error('الزيارة مقفلة ومؤرشفة')
+      return
+    }
+    setTechnicianName(newTech)
+    const { error } = await supabase.from('visits').update({ technician_name: newTech || null } as any).eq('id', visitId)
+    if (error) {
+      toast.error('فشل في حفظ الفني المسؤول')
+    } else {
+      toast.success(newTech ? `تم تعيين الفني: ${newTech}` : 'تم إزالة تعيين الفني')
+      loadVisit()
+    }
   }
 
   const handleComplaintSave = async (text: string) => {
@@ -238,7 +256,20 @@ export default function VisitDetailClient({ visitId, role }: Props) {
                     {customer.name} · <span className="font-mono">{customer.phone}</span>
                   </p>
                 )}
-                <p className="text-slate-400 text-sm mt-1">{formatDate(visit.entry_date)}</p>
+                <div className="flex items-center gap-2 mt-2 flex-wrap">
+                  <p className="text-slate-400 text-sm">{formatDate(visit.entry_date)}</p>
+                  {technicianName ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                      <Wrench size={11} className="text-amber-600" />
+                      الفني: {technicianName}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                      <Wrench size={11} />
+                      بدون فني محدد
+                    </span>
+                  )}
+                </div>
               </div>
               <div className="flex flex-col items-end gap-1.5">
                 <StatusBadge status={visit.status} />
@@ -341,6 +372,27 @@ export default function VisitDetailClient({ visitId, role }: Props) {
 
         {/* Sidebar column */}
         <div className="space-y-6">
+          {/* Technician Assignment */}
+          <div className="soft-card p-5 space-y-3">
+            <h3 className="font-semibold text-slate-700 flex items-center gap-2">
+              <Wrench size={16} className="text-violet-500" />
+              الفني المسؤول
+            </h3>
+            <select
+              value={technicianName}
+              onChange={e => handleTechnicianChange(e.target.value)}
+              disabled={isLocked}
+              className={`w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-violet-400 transition-all ${
+                isLocked ? 'cursor-not-allowed bg-slate-50 text-slate-400' : ''
+              }`}
+            >
+              <option value="">-- اختر الفني المسؤول --</option>
+              {TECHNICIANS.map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Status control */}
           <div className="soft-card p-5 space-y-3">
             <h3 className="font-semibold text-slate-700">حالة الزيارة</h3>

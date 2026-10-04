@@ -82,3 +82,72 @@ export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
   'Income':  'إيراد',
   'Expense': 'مصروف',
 }
+
+// ── Baghdad Timezone (Asia/Baghdad) Helpers ─────────────────
+
+export function getBaghdadDateKey(dateStr: string | Date | null | undefined): { dayKey: string; monthKey: string } {
+  if (!dateStr) return { dayKey: '', monthKey: '' }
+  try {
+    const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr
+    if (isNaN(d.getTime())) return { dayKey: '', monthKey: '' }
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Baghdad',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(d).split('-')
+    return {
+      dayKey: `${parts[0]}-${parts[1]}-${parts[2]}`,
+      monthKey: `${parts[0]}-${parts[1]}`,
+    }
+  } catch {
+    return { dayKey: '', monthKey: '' }
+  }
+}
+
+export function getBaghdadTodayKey(): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Baghdad',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date()).split('-')
+  return `${parts[0]}-${parts[1]}-${parts[2]}`
+}
+
+export function isBaghdadToday(dateStr: string | Date | null | undefined): boolean {
+  if (!dateStr) return false
+  const { dayKey } = getBaghdadDateKey(dateStr)
+  return dayKey === getBaghdadTodayKey()
+}
+
+export function formatTimeBaghdad(dateStr: string | Date): string {
+  try {
+    const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr
+    if (isNaN(d.getTime())) return ''
+    return new Intl.DateTimeFormat('ar-IQ', {
+      timeZone: 'Asia/Baghdad',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    }).format(d)
+  } catch {
+    return ''
+  }
+}
+
+export function formatFullBaghdadDate(dateStr: string | Date = new Date()): string {
+  try {
+    const d = typeof dateStr === 'string' ? new Date(dateStr) : dateStr
+    return new Intl.DateTimeFormat('ar-IQ', {
+      timeZone: 'Asia/Baghdad',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(d)
+  } catch {
+    return ''
+  }
+}
+

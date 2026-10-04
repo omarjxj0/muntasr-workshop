@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase/server'
 import PhoneSearch from '@/components/PhoneSearch'
-import { Car, Package, Users, TrendingUp, Wallet, DollarSign, ArrowUpRight } from 'lucide-react'
+import { Car, Package, Users, TrendingUp, Wallet, DollarSign, ArrowUpRight, Flame, ArrowLeft } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import type { Profile } from '@/lib/types'
@@ -181,6 +181,35 @@ export default async function DashboardPage() {
         <p className="text-slate-500">نظام إدارة الصيانة والبرمجة الإلكترونية</p>
       </div>
 
+      {/* Daily Shift Work Prominent Banner */}
+      <Link
+        href="/daily-shift"
+        className="soft-card p-5 relative overflow-hidden flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-2 border-amber-300 hover:border-amber-400 bg-gradient-to-r from-amber-50/90 via-white to-amber-50/50 hover:shadow-lg transition-all group block"
+      >
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-amber-500 text-white flex items-center justify-center shadow-lg shadow-amber-500/25 shrink-0 group-hover:scale-105 transition-transform">
+            <Flame size={26} className="animate-pulse" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-extrabold text-lg text-slate-800 group-hover:text-amber-700 transition-colors">
+                شغل اليوم · سجل العمل وتوزيع الفنيين
+              </h3>
+              <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                مباشر الشفت
+              </span>
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">
+              متابعة إنجازات الفنيين المباشرة، فحص السيارات والعقول، وحسابات دخل الشفت لليوم.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 self-end sm:self-center shrink-0 text-amber-800 font-bold text-sm bg-amber-100/90 px-4 py-2 rounded-xl group-hover:bg-amber-500 group-hover:text-white transition-all">
+          <span>فتح سجل شغل اليوم</span>
+          <ArrowLeft size={16} />
+        </div>
+      </Link>
+
       {/* Financial Breakdown Cards (Daily, Monthly, All-Time) */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -212,6 +241,13 @@ export default async function DashboardPage() {
               <p className="text-[11px] text-slate-400 mt-2 truncate">
                 إيرادات: {formatCurrency(todayVisitsRev + todayInspectionsRev)} · مصاريف: {formatCurrency(todayExpenses + todayWages)}
               </p>
+              <Link
+                href="/daily-shift"
+                className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:underline pt-2 border-t border-emerald-100 w-full"
+              >
+                <span>عرض شغل اليوم بالتفصيل</span>
+                <ArrowLeft size={13} />
+              </Link>
             </div>
           </div>
 

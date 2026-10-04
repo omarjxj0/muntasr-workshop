@@ -29,6 +29,8 @@ export interface Vehicle {
   make_and_model: string
 }
 
+export { TECHNICIANS, type TechnicianName } from './constants'
+
 export interface Visit {
   id: string
   vehicle_id: string
@@ -36,6 +38,8 @@ export interface Visit {
   complaint: string | null
   status: VisitStatus
   total_amount: number
+  labor_cost?: number
+  technician_name?: string | null
 }
 
 export interface EcuCompany {
@@ -136,6 +140,7 @@ export interface QuickInspection {
   id: string
   type: InspectionType
   inspection_type?: InspectionType
+  technician_name?: string | null
   customer_name: string
   phone: string | null
   car_info?: string | null
