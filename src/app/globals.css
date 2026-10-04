@@ -146,13 +146,14 @@ body {
   animation: fade-up 0.35s ease-out both;
 }
 
-/* ── Print Receipt Styles ────────────────────────────────── */
+/* ── Print Styles ─────────────────────────────────────────── */
 @media print {
   body * {
     visibility: hidden;
   }
 
-  #thermal-receipt, #thermal-receipt * {
+  #thermal-receipt, #thermal-receipt *,
+  #daily-shift-report, #daily-shift-report * {
     visibility: visible;
   }
 
@@ -168,8 +169,21 @@ body {
     box-sizing: border-box;
   }
 
-  @page {
-    size: A5 portrait;
+  #daily-shift-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
     margin: 0;
+    padding: 10mm;
+    box-sizing: border-box;
+    display: block !important;
+    background: #ffffff;
+    color: #000000;
+  }
+
+  @page {
+    size: auto;
+    margin: 8mm;
   }
 }

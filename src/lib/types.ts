@@ -237,6 +237,14 @@ export interface DailyWageWithEmployee extends DailyWage {
   employees: Employee
 }
 
+export interface Expense {
+  id: string
+  amount: number
+  description: string
+  category: string
+  created_at: string
+}
+
 // ── Supabase Database type (for createClient generics) ──────
 export type Database = {
   public: {
@@ -255,6 +263,7 @@ export type Database = {
       used_parts:         { Row: UsedPart;        Insert: Omit<UsedPart, 'id'>;          Update: Partial<Omit<UsedPart, 'id'>> }
       employees:          { Row: Employee;        Insert: Omit<Employee, 'id'>;          Update: Partial<Omit<Employee, 'id'>> }
       daily_wages:        { Row: DailyWage;       Insert: Omit<DailyWage, 'id'>;        Update: Partial<Omit<DailyWage, 'id'>> }
+      expenses:           { Row: Expense;         Insert: Omit<Expense, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<Omit<Expense, 'id'>> }
       transactions:       { Row: Transaction;     Insert: Omit<Transaction, 'id'>;      Update: Partial<Omit<Transaction, 'id'>> }
       quick_inspections:  { Row: QuickInspection; Insert: Omit<QuickInspection, 'id' | 'created_at' | 'updated_at'> & { id?: string; image_paths?: ImageEntry[] | string[] | string }; Update: Partial<Omit<QuickInspection, 'id'>> & { image_paths?: ImageEntry[] | string[] | string } }
     }

@@ -1,13 +1,13 @@
 import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
-import DailyShiftClient from './DailyShiftClient'
+import DailyShiftClient, { type DailyExpenseItem } from './DailyShiftClient'
 import { isBaghdadToday } from '@/lib/utils'
 import type { Profile } from '@/lib/types'
 
 export const metadata: Metadata = {
   title: 'شغل اليوم · سجل العمل اليومي وتوزيع الفنيين',
-  description: 'متابعة شفت اليوم المباشر وتوزيع العمل على الفنيين وإجمالي الدخل في ورشة منتصر',
+  description: 'متابعة شفت اليوم المباشر وتوزيع العمل على الفنيين وإجمالي الدخل والصرفيات في ورشة منتصر',
 }
 
 export default async function DailyShiftPage() {
@@ -24,10 +24,12 @@ export default async function DailyShiftPage() {
     .eq('id', user.id)
     .single<Profile>()
 
-  // Fetch recent visits and quick inspections
+  // Fetch recent visits, quick inspections, expenses, and daily wages
   const [
     { data: rawVisits, error: visitsErr },
-    { data: rawInspections, error: inspErr }
+    { data: rawInspections, error: inspErr },
+    { data: rawExpenses, error: expErr },
+    { data: rawWages, error: wagesErr },
   ] = await Promise.all([
     supabase
       .from('visits')
@@ -45,7 +47,20 @@ export default async function DailyShiftPage() {
       .from('quick_inspections')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(400)
+      .limit(400),
+    supabase
+      .from('expenses')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(300),
+    supabase
+      .from('daily_wages')
+      .select(`
+        id, amount, date, employee_id,
+        employees ( name )
+      `)
+      .order('date', { ascending: false })
+      .limit(100),
   ])
 
   if (visitsErr) {
@@ -53,6 +68,12 @@ export default async function DailyShiftPage() {
   }
   if (inspErr) {
     console.error('Daily Shift Inspections Fetch Error:', inspErr)
+  }
+  if (expErr) {
+    console.error('Daily Shift Expenses Fetch Error:', expErr)
+  }
+  if (wagesErr) {
+    console.warn('Daily Shift Wages Fetch Warning (may require admin):', wagesErr)
   }
 
   // Filter strictly for today in Baghdad timezone (Asia/Baghdad)
@@ -76,11 +97,38 @@ export default async function DailyShiftPage() {
 
   const todayInspections = (rawInspections || []).filter(qi => isBaghdadToday(qi.created_at)) as any[]
 
+  // Operational expenses registered today in Baghdad timezone
+  const todayExpenses: DailyExpenseItem[] = (rawExpenses || [])
+    .filter(e => isBaghdadToday(e.created_at))
+    .map(e => ({
+      id: e.id,
+      amount: Math.round(Number(e.amount) || 0),
+      description: e.description || 'مصروف تشغيلي',
+      category: e.category || 'أخرى',
+      created_at: e.created_at,
+      isWage: false,
+    }))
+
+  // Daily wages registered today in Baghdad timezone
+  const todayWages: DailyExpenseItem[] = (rawWages || [])
+    .filter(w => isBaghdadToday(w.date))
+    .map(w => ({
+      id: w.id,
+      amount: Math.round(Number(w.amount) || 0),
+      description: `أجر يومي - ${(w.employees as any)?.name || 'فني / موظف'}`,
+      category: 'أجور ورواتب',
+      created_at: w.date,
+      isWage: true,
+      recipientName: (w.employees as any)?.name || null,
+    }))
+
   return (
     <DailyShiftClient
       role={profile?.role ?? 'technician'}
       initialVisits={todayVisits}
       initialInspections={todayInspections}
+      initialExpenses={todayExpenses}
+      initialWages={todayWages}
     />
   )
 }
