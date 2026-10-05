@@ -178,6 +178,22 @@ export interface Ecu {
   quantity: number
   notes: string | null
   shelf_location: string | null
+  status?: string | null
+}
+
+export interface DirectSale {
+  id: string
+  created_at: string
+  sale_date?: string
+  item_type?: string
+  barcode?: string | null
+  ecu_id?: string | null
+  item_name: string
+  customer_name?: string | null
+  phone?: string | null
+  selling_price: number
+  technician_name?: string | null
+  notes?: string | null
 }
 
 export interface UsedPart {
@@ -266,6 +282,7 @@ export type Database = {
       expenses:           { Row: Expense;         Insert: Omit<Expense, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<Omit<Expense, 'id'>> }
       transactions:       { Row: Transaction;     Insert: Omit<Transaction, 'id'>;      Update: Partial<Omit<Transaction, 'id'>> }
       quick_inspections:  { Row: QuickInspection; Insert: Omit<QuickInspection, 'id' | 'created_at' | 'updated_at'> & { id?: string; image_paths?: ImageEntry[] | string[] | string }; Update: Partial<Omit<QuickInspection, 'id'>> & { image_paths?: ImageEntry[] | string[] | string } }
+      direct_sales:       { Row: DirectSale;      Insert: Omit<DirectSale, 'id' | 'created_at'> & { id?: string; created_at?: string }; Update: Partial<Omit<DirectSale, 'id'>> }
     }
     Views: Record<string, never>
     Functions: Record<string, never>

@@ -69,7 +69,7 @@ export default function InventoryClient({
   const [selectedFamilyId, setSelectedFamilyId] = useState('')
   const [selectedModelCodeId, setSelectedModelCodeId] = useState('')
   const [selectedSoftwareId, setSelectedSoftwareId] = useState('')
-  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out'>('all')
+  const [stockFilter, setStockFilter] = useState<'all' | 'low' | 'out' | 'sold'>('all')
 
   // ── Scanner refs ──────────────────────────────────────────
   const searchInputRef = useRef<HTMLInputElement>(null)
@@ -282,6 +282,10 @@ export default function InventoryClient({
     }>()
 
     for (const item of (initialEcus || [])) {
+      // Hide sold ECUs so they no longer show as available in inventory
+      if (stockFilter !== 'sold' && item.status === 'sold') continue
+      if (stockFilter === 'sold' && item.status !== 'sold') continue
+
       if (selectedMfrName && item.manufacturer?.trim().toLowerCase() !== selectedMfrName.trim().toLowerCase()) continue
       if (selectedFamName && item.ecu_family?.trim().toLowerCase() !== selectedFamName.trim().toLowerCase()) continue
       if (selectedMcName && item.vehicle_model_code?.trim().toLowerCase() !== selectedMcName.trim().toLowerCase()) continue
@@ -734,7 +738,7 @@ export default function InventoryClient({
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            الكل ({initialEcus.length})
+            المتوفر ({initialEcus.filter(e => e.status !== 'sold').length})
           </button>
           <button
             type="button"
@@ -757,6 +761,17 @@ export default function InventoryClient({
             }`}
           >
             🚫 نفد
+          </button>
+          <button
+            type="button"
+            onClick={() => setStockFilter('sold')}
+            className={`px-3 py-1 rounded-xl text-xs font-semibold transition-all ${
+              stockFilter === 'sold'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
+            }`}
+          >
+            🏷️ مباعة ({initialEcus.filter(e => e.status === 'sold').length})
           </button>
         </div>
       </div>

@@ -6,7 +6,8 @@ import {
   Flame, Car, Cpu, Wrench, Search, X, Calendar, DollarSign,
   CheckCircle2, Clock, Filter, Printer, ExternalLink, RefreshCw,
   TrendingUp, TrendingDown, Activity, User, Phone, AlertCircle, ChevronLeft,
-  Wallet, Receipt, Plus, Trash2, ArrowDownRight, ArrowUpRight, Coins, Sparkles
+  Wallet, Receipt, Plus, Trash2, ArrowDownRight, ArrowUpRight, Coins, Sparkles,
+  ShoppingBag, Scan, Tag
 } from 'lucide-react'
 import {
   formatCurrency,
@@ -14,12 +15,14 @@ import {
   formatFullBaghdadDate,
   formatDate,
   parseAmount,
+  parseArabicNumerals,
   cn,
   VISIT_STATUS_LABELS,
   VISIT_STATUS_COLORS,
 } from '@/lib/utils'
 import { TECHNICIANS } from '@/lib/constants'
-import type { VisitStatus, UserRole } from '@/lib/types'
+import type { VisitStatus, UserRole, DirectSale, Ecu } from '@/lib/types'
+import { printSaleReceipt } from '@/lib/printSaleReceipt'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 
@@ -70,7 +73,7 @@ export interface DailyExpenseItem {
 
 export interface UnifiedOperation {
   id: string
-  kind: 'visit' | 'inspection_car' | 'inspection_ecu'
+  kind: 'visit' | 'inspection_car' | 'inspection_ecu' | 'sale'
   kindLabel: string
   customerName: string
   customerPhone: string | null
@@ -83,13 +86,14 @@ export interface UnifiedOperation {
   statusText: string
   statusVariant: 'success' | 'warning' | 'info' | 'neutral'
   detailsHref?: string
-  rawItem: DailyVisitItem | DailyInspectionItem
+  rawItem: DailyVisitItem | DailyInspectionItem | DirectSale
 }
 
 interface Props {
   role: UserRole
   initialVisits: DailyVisitItem[]
   initialInspections: DailyInspectionItem[]
+  initialSales?: DirectSale[]
   initialExpenses?: DailyExpenseItem[]
   initialWages?: DailyExpenseItem[]
 }
@@ -102,10 +106,20 @@ const EXPENSE_CATEGORIES = [
   'أخرى'
 ]
 
+const QUICK_SALE_ITEMS = [
+  { label: 'فيشة ضفيرة', price: 25000, icon: '🔌' },
+  { label: 'ملف إيمو أوف (Immo Off)', price: 75000, icon: '💾' },
+  { label: 'برمجة وفك شفرة عقل', price: 50000, icon: '⚡' },
+  { label: 'استنساخ عقل (Cloning)', price: 100000, icon: '🧬' },
+  { label: 'تعديل سرعة / كتمة', price: 50000, icon: '🚀' },
+  { label: 'فيشة حساس أوكسجين / كام', price: 20000, icon: '🏷️' },
+]
+
 export default function DailyShiftClient({
   role,
   initialVisits,
   initialInspections,
+  initialSales = [],
   initialExpenses = [],
   initialWages = []
 }: Props) {
@@ -113,9 +127,25 @@ export default function DailyShiftClient({
 
   // State
   const [selectedTech, setSelectedTech] = useState<string | null>(null)
-  const [filterKind, setFilterKind] = useState<'all' | 'visit' | 'inspection' | 'expense'>('all')
+  const [filterKind, setFilterKind] = useState<'all' | 'visit' | 'inspection' | 'sale' | 'expense'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [previewInspection, setPreviewInspection] = useState<DailyInspectionItem | null>(null)
+
+  // Direct Sales State
+  const [sales, setSales] = useState<DirectSale[]>(() => initialSales)
+
+  // Fast Direct Sale Modal State
+  const [isSaleModalOpen, setIsSaleModalOpen] = useState(false)
+  const [saleBarcodeInput, setSaleBarcodeInput] = useState('')
+  const [saleMatchedEcu, setSaleMatchedEcu] = useState<Ecu | null>(null)
+  const [isSaleSearchingEcu, setIsSaleSearchingEcu] = useState(false)
+  const [saleItemName, setSaleItemName] = useState('')
+  const [salePrice, setSalePrice] = useState('')
+  const [saleBuyerName, setSaleBuyerName] = useState('')
+  const [saleBuyerPhone, setSaleBuyerPhone] = useState('')
+  const [saleTech, setSaleTech] = useState<string>(TECHNICIANS[0] || 'منتصر')
+  const [saleNotes, setSaleNotes] = useState('')
+  const [isSubmittingSale, setIsSubmittingSale] = useState(false)
 
   // Expenses State (local update for instant UI responsiveness)
   const [expenses, setExpenses] = useState<DailyExpenseItem[]>(() =>
@@ -139,6 +169,125 @@ export default function DailyShiftClient({
   const [expenseWorker, setExpenseWorker] = useState('عام / الورشة')
   const [expenseNote, setExpenseNote] = useState('')
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false)
+
+  // Barcode Lookup for Fast Direct Sale
+  const lookupSaleBarcode = async (code: string) => {
+    const trimmed = code.trim()
+    if (!trimmed) {
+      setSaleMatchedEcu(null)
+      return
+    }
+    setIsSaleSearchingEcu(true)
+    try {
+      const { data } = await supabase
+        .from('ecus')
+        .select('*')
+        .eq('barcode', trimmed)
+        .maybeSingle()
+
+      if (data) {
+        setSaleMatchedEcu(data as Ecu)
+        const parts = [
+          data.manufacturer,
+          data.ecu_family,
+          data.vehicle_model_code,
+          data.software_id
+        ].filter(Boolean)
+
+        const autoName = parts.length > 0 ? `عقل ${parts.join(' - ')}` : data.name || 'عقل سيارة'
+        setSaleItemName(autoName)
+        if (data.selling_price && Number(data.selling_price) > 0) {
+          setSalePrice(String(Math.round(Number(data.selling_price))))
+        }
+        if (data.status === 'sold') {
+          toast('⚠️ تنبيه: هذا العقل مسجل كمباع مسبقاً', { icon: '⚠️' })
+        } else {
+          toast.success(`تم العثور على: ${data.name || autoName}`, { icon: '🎯' })
+        }
+      } else {
+        setSaleMatchedEcu(null)
+      }
+    } catch (err) {
+      console.error('Barcode lookup error:', err)
+    } finally {
+      setIsSaleSearchingEcu(false)
+    }
+  }
+
+  // Handle Quick Add Direct Sale
+  const handleQuickAddSale = async (e: React.FormEvent, printAfter = false) => {
+    e.preventDefault()
+    const price = parseAmount(salePrice)
+    if (!saleItemName.trim()) {
+      toast.error('يرجى تحديد أو كتابة اسم الصنف المباع')
+      return
+    }
+    if (price <= 0) {
+      toast.error('يرجى إدخال سعر بيع صحيح')
+      return
+    }
+
+    setIsSubmittingSale(true)
+    try {
+      const payload = {
+        item_type: saleMatchedEcu ? 'ecu' : 'accessory_or_file',
+        ecu_id: saleMatchedEcu ? saleMatchedEcu.id : null,
+        item_name: saleItemName.trim(),
+        customer_name: saleBuyerName.trim() || null,
+        phone: saleBuyerPhone.trim() || null,
+        selling_price: price,
+        technician_name: saleTech || null,
+        notes: saleNotes.trim() || null,
+      }
+
+      const { data, error } = await supabase
+        .from('direct_sales')
+        .insert(payload as any)
+        .select()
+        .single()
+
+      if (error) throw error
+
+      if (saleMatchedEcu) {
+        await supabase
+          .from('ecus')
+          .update({ status: 'sold', stock_quantity: 0 } as any)
+          .eq('id', saleMatchedEcu.id)
+      }
+
+      const newSale = data as DirectSale
+      setSales(prev => [newSale, ...prev])
+      toast.success('تم تسجيل البيع وإضافته إلى دخل شفت اليوم! 🛒')
+
+      if (printAfter) {
+        printSaleReceipt({
+          id: newSale.id,
+          itemName: newSale.item_name,
+          barcode: saleMatchedEcu?.barcode || (saleBarcodeInput.trim() || null),
+          sellingPrice: Number(newSale.selling_price),
+          customerName: newSale.customer_name,
+          phone: newSale.phone,
+          technicianName: newSale.technician_name,
+          notes: newSale.notes,
+          createdAt: newSale.created_at,
+        })
+      }
+
+      setSaleBarcodeInput('')
+      setSaleMatchedEcu(null)
+      setSaleItemName('')
+      setSalePrice('')
+      setSaleBuyerName('')
+      setSaleBuyerPhone('')
+      setSaleNotes('')
+      setIsSaleModalOpen(false)
+    } catch (err: any) {
+      console.error('Failed to submit sale in daily-shift:', err)
+      toast.error('فشل في تسجيل البيع: ' + (err.message || 'خطأ غير متوقع'))
+    } finally {
+      setIsSubmittingSale(false)
+    }
+  }
 
   // Map visits and inspections into UnifiedOperation array
   const allOperations: UnifiedOperation[] = useMemo(() => {
@@ -214,9 +363,29 @@ export default function DailyShiftClient({
       })
     }
 
+    // 3. Direct Sales (ECU Store & Parts)
+    for (const s of sales) {
+      list.push({
+        id: s.id,
+        kind: 'sale',
+        kindLabel: '🛒 بيع عقل / مبيعات',
+        customerName: s.customer_name || 'زبون نقدي',
+        customerPhone: s.phone || null,
+        vehicleOrSubject: s.item_name,
+        licensePlate: s.barcode ? `باركود: ${s.barcode}` : null,
+        technicianName: s.technician_name?.trim() || 'غير محدد',
+        amount: Number(s.selling_price) || 0,
+        timestamp: s.created_at,
+        timeFormatted: formatTimeBaghdad(s.created_at),
+        statusText: 'تم البيع والتسليم',
+        statusVariant: 'success',
+        rawItem: s,
+      })
+    }
+
     // Sort descending by time
     return list.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-  }, [initialVisits, initialInspections])
+  }, [initialVisits, initialInspections, sales])
 
   // Summary Metrics
   const totalOperationsCount = allOperations.length
@@ -231,7 +400,14 @@ export default function DailyShiftClient({
     return initialVisits.filter(v => v.status === 'Pending' || v.status === 'In Progress').length
   }, [initialVisits])
 
-  // Grand Total Revenue collected / recorded today (strictly delivered visits + inspection fees)
+  // Direct Sales Revenue Today
+  const directSalesRevenueToday = useMemo(() => {
+    return sales.reduce((sum, s) => sum + (Number(s.selling_price) || 0), 0)
+  }, [sales])
+
+  const directSalesCount = sales.length
+
+  // Grand Total Revenue collected / recorded today (strictly delivered visits + inspection fees + direct sales)
   const totalRevenueToday = useMemo(() => {
     return allOperations.reduce((sum, op) => sum + (op.amount || 0), 0)
   }, [allOperations])
@@ -273,23 +449,24 @@ export default function DailyShiftClient({
 
   // Technician Breakdown Calculation
   const technicianStats = useMemo(() => {
-    const stats: Record<string, { count: number; totalAmount: number; visits: number; inspections: number }> = {}
+    const stats: Record<string, { count: number; totalAmount: number; visits: number; inspections: number; sales: number }> = {}
 
     // Initialize with all workshop technicians
     for (const tech of TECHNICIANS) {
-      stats[tech] = { count: 0, totalAmount: 0, visits: 0, inspections: 0 }
+      stats[tech] = { count: 0, totalAmount: 0, visits: 0, inspections: 0, sales: 0 }
     }
     // Also track unassigned if any
-    stats['غير محدد'] = { count: 0, totalAmount: 0, visits: 0, inspections: 0 }
+    stats['غير محدد'] = { count: 0, totalAmount: 0, visits: 0, inspections: 0, sales: 0 }
 
     for (const op of allOperations) {
       const name = op.technicianName || 'غير محدد'
       if (!stats[name]) {
-        stats[name] = { count: 0, totalAmount: 0, visits: 0, inspections: 0 }
+        stats[name] = { count: 0, totalAmount: 0, visits: 0, inspections: 0, sales: 0 }
       }
       stats[name].count += 1
       stats[name].totalAmount += op.amount
       if (op.kind === 'visit') stats[name].visits += 1
+      else if (op.kind === 'sale') stats[name].sales += 1
       else stats[name].inspections += 1
     }
 
@@ -318,7 +495,8 @@ export default function DailyShiftClient({
 
       // Kind filter
       if (filterKind === 'visit' && op.kind !== 'visit') return false
-      if (filterKind === 'inspection' && op.kind === 'visit') return false
+      if (filterKind === 'inspection' && op.kind !== 'inspection_car' && op.kind !== 'inspection_ecu') return false
+      if (filterKind === 'sale' && op.kind !== 'sale') return false
 
       // Search filter
       if (searchQuery.trim()) {
@@ -452,6 +630,7 @@ export default function DailyShiftClient({
           <td style="text-align: center;">${t.count} عملية</td>
           <td style="text-align: center;">${t.visits}</td>
           <td style="text-align: center;">${t.inspections}</td>
+          <td style="text-align: center; color: #4338ca; font-weight: bold;">${t.sales || 0}</td>
           <td style="text-align: left; font-weight: bold; font-family: monospace;">${formatCurrency(t.totalAmount)}</td>
         </tr>
       `
@@ -554,7 +733,7 @@ export default function DailyShiftClient({
     }
     .kpi-grid {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 10px;
       margin-bottom: 16px;
     }
@@ -704,7 +883,12 @@ export default function DailyShiftClient({
     <div class="kpi-card kpi-income">
       <div class="kpi-label">إجمالي دخل اليوم المحصل (Gross)</div>
       <div class="kpi-val">${formatCurrency(totalRevenueToday)}</div>
-      <div class="kpi-sub">زيارات: ${formatCurrency(visitsRevenueToday)} • فحوصات: ${formatCurrency(inspectionsRevenueToday)}</div>
+      <div class="kpi-sub">زيارات: ${formatCurrency(visitsRevenueToday)} • فحوصات: ${formatCurrency(inspectionsRevenueToday)} • مبيعات: ${formatCurrency(directSalesRevenueToday)}</div>
+    </div>
+    <div class="kpi-card" style="border-color: #6366f1; background: #eef2ff;">
+      <div class="kpi-label" style="color: #4f46e5;">مبيعات الورشة والعقول (Store)</div>
+      <div class="kpi-val" style="color: #4338ca;">${formatCurrency(directSalesRevenueToday)}</div>
+      <div class="kpi-sub" style="color: #6366f1;">${directSalesCount} عقل / قطعة مباعة</div>
     </div>
     <div class="kpi-card kpi-expense">
       <div class="kpi-label">إجمالي صرفيات وأجور اليوم (Expenses)</div>
@@ -744,6 +928,44 @@ export default function DailyShiftClient({
     </tfoot>
   </table>
 
+  ${sales.length > 0 ? `
+  <!-- Section: Direct Sales Breakdown -->
+  <div class="section-title">
+    <span>جدول مبيعات العقول والقطع المباشرة (${sales.length} مبيعات)</span>
+    <span style="font-size: 11px; font-weight: normal; color: #4338ca;">الإجمالي: ${formatCurrency(directSalesRevenueToday)}</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th style="width: 36px; text-align: center;">#</th>
+        <th>المادة المباعة</th>
+        <th>المشتري</th>
+        <th style="text-align: center; width: 100px;">الفني</th>
+        <th style="text-align: center; width: 80px;">الوقت</th>
+        <th style="text-align: left; width: 110px;">المبلغ (IQD)</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${sales.map((s, i) => `
+        <tr>
+          <td style="text-align: center; color: #94a3b8; font-family: monospace;">#${i + 1}</td>
+          <td style="font-weight: bold;">${s.item_name} ${s.barcode ? `<span style="font-size: 10px; color: #6366f1;">(${s.barcode})</span>` : ''}</td>
+          <td>${s.customer_name || 'زبون نقدي'} ${s.phone ? `<span style="font-size: 10px; color: #64748b;">${s.phone}</span>` : ''}</td>
+          <td style="text-align: center;">${s.technician_name || 'عام'}</td>
+          <td style="text-align: center; font-size: 11px; color: #64748b;">${formatTimeBaghdad(s.created_at)}</td>
+          <td style="text-align: left; font-weight: bold; font-family: monospace; color: #059669;">${formatCurrency(s.selling_price)}</td>
+        </tr>
+      `).join('')}
+    </tbody>
+    <tfoot>
+      <tr style="background: #eef2ff; font-weight: bold;">
+        <td colspan="5" style="text-align: right; color: #3730a3;">مجموع مبيعات العقول والورشة اليوم:</td>
+        <td style="text-align: left; font-family: monospace; color: #4338ca;">${formatCurrency(directSalesRevenueToday)}</td>
+      </tr>
+    </tfoot>
+  </table>
+  ` : ''}
+
   <!-- Section 2: Technician Distribution -->
   <div class="section-title">
     <span>توزيع إنتاجية ودخل الفنيين في الشفت</span>
@@ -753,9 +975,10 @@ export default function DailyShiftClient({
     <thead>
       <tr>
         <th>الفني المسؤول</th>
-        <th style="text-align: center; width: 100px;">إجمالي العمليات</th>
-        <th style="text-align: center; width: 80px;">زيارات مسلّمة</th>
-        <th style="text-align: center; width: 80px;">فحوصات</th>
+        <th style="text-align: center; width: 90px;">إجمالي العمليات</th>
+        <th style="text-align: center; width: 75px;">زيارات مسلّمة</th>
+        <th style="text-align: center; width: 75px;">فحوصات</th>
+        <th style="text-align: center; width: 75px;">مبيعات</th>
         <th style="text-align: left; width: 130px;">الإيراد المحصل (IQD)</th>
       </tr>
     </thead>
@@ -884,6 +1107,15 @@ export default function DailyShiftClient({
             <span>صرفية جديدة +</span>
           </button>
 
+          {/* Quick Action Button: + بيع عقل / مبيعات (Requirement 2) */}
+          <button
+            onClick={() => setIsSaleModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-all shadow-sm shadow-indigo-600/25 cursor-pointer active:scale-95"
+          >
+            <ShoppingBag size={16} />
+            <span>بيع عقل / مبيعات +</span>
+          </button>
+
           <Link
             href="/inspections"
             className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition-all shadow-sm"
@@ -901,8 +1133,8 @@ export default function DailyShiftClient({
 
       {/* Top Metric Cards (Requirements 2) */}
       <div className="space-y-4">
-        {/* Tier 1: The 3 Core Financial Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Tier 1: The 4 Core Financial Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Gross Income */}
           <div className="soft-card p-5 relative overflow-hidden border-2 border-emerald-100 hover:border-emerald-300 transition-all shadow-sm bg-gradient-to-br from-emerald-50/30 via-white to-white">
             <div className="flex items-center justify-between mb-3">
@@ -919,15 +1151,48 @@ export default function DailyShiftClient({
               <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600 mt-1 font-mono tracking-tight">
                 {formatCurrency(totalRevenueToday)}
               </p>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-2">
+              <div className="flex items-center gap-1.5 text-[10.5px] text-slate-500 mt-2 flex-wrap">
                 <span>زيارات: {formatCurrency(visitsRevenueToday)}</span>
                 <span>•</span>
                 <span>فحوصات: {formatCurrency(inspectionsRevenueToday)}</span>
+                <span>•</span>
+                <span className="font-semibold text-indigo-700">مبيعات: {formatCurrency(directSalesRevenueToday)}</span>
               </div>
             </div>
           </div>
 
-          {/* Card 2: Today's Expenses & Wages Card (Requirement 2) */}
+          {/* Card 2: Today's Store & ECU Direct Sales (Requirement 2) */}
+          <div className="soft-card p-5 relative overflow-hidden border-2 border-indigo-200 hover:border-indigo-300 transition-all shadow-sm bg-gradient-to-br from-indigo-50/40 via-white to-indigo-50/20">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-full border border-indigo-200 flex items-center gap-1">
+                <ShoppingBag size={13} />
+                مبيعات الورشة والعقول
+              </span>
+              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-600/20">
+                <ShoppingBag size={20} />
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-slate-400 font-medium">مبيعات اليوم المباشرة</p>
+              <p className="text-2xl sm:text-3xl font-extrabold text-indigo-600 mt-1 font-mono tracking-tight">
+                {formatCurrency(directSalesRevenueToday)}
+              </p>
+              <div className="flex items-center justify-between text-[11px] text-slate-500 mt-2">
+                <span className="font-semibold text-indigo-700">
+                  {directSalesCount} {directSalesCount === 1 ? 'عقل / قطعة' : directSalesCount === 2 ? 'عقلان / قطعتان' : 'عقول وقطع مباعة'}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsSaleModalOpen(true)}
+                  className="text-[10px] font-bold text-indigo-600 hover:underline cursor-pointer"
+                >
+                  + بيع فوري
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Today's Expenses & Wages Card (Requirement 2) */}
           <div className="soft-card p-5 relative overflow-hidden border-2 border-rose-200 hover:border-rose-300 transition-all shadow-sm bg-gradient-to-br from-rose-50/40 via-white to-rose-50/20">
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold text-rose-700 bg-rose-50 px-2.5 py-1 rounded-full border border-rose-200 flex items-center gap-1">
@@ -956,7 +1221,7 @@ export default function DailyShiftClient({
             </div>
           </div>
 
-          {/* Card 3: Net Profit Card (Requirement 2) */}
+          {/* Card 4: Net Profit Card (Requirement 2) */}
           <div className={cn(
             "soft-card p-5 relative overflow-hidden border-2 transition-all shadow-md group",
             todayNetProfit >= 0
@@ -1022,10 +1287,12 @@ export default function DailyShiftClient({
               <p className="text-2xl sm:text-3xl font-extrabold text-violet-700 mt-1">
                 {totalOperationsCount} <span className="text-base font-normal text-slate-500">عملية</span>
               </p>
-              <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-2">
+              <div className="flex items-center gap-2 text-[11px] text-slate-500 mt-2 flex-wrap">
                 <span>{totalVisitsCount} زيارة صيانة</span>
                 <span>•</span>
                 <span>{totalInspectionsCount} فحص سريع</span>
+                <span>•</span>
+                <span className="font-semibold text-indigo-700">{directSalesCount} مبيعات عقول</span>
               </div>
             </div>
           </div>
@@ -1220,6 +1487,16 @@ export default function DailyShiftClient({
                 فحوصات سريعة ({totalInspectionsCount})
               </button>
               <button
+                onClick={() => setFilterKind('sale')}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1',
+                  filterKind === 'sale' ? 'bg-white text-indigo-700 shadow-sm' : 'text-slate-500 hover:text-indigo-700'
+                )}
+              >
+                <ShoppingBag size={12} />
+                <span>مبيعات العقول والورشة ({directSalesCount})</span>
+              </button>
+              <button
                 onClick={() => setFilterKind('expense')}
                 className={cn(
                   'px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1',
@@ -1405,6 +1682,7 @@ export default function DailyShiftClient({
                   {filteredOperations.map((op, idx) => {
                     const isVisit = op.kind === 'visit'
                     const isCarInsp = op.kind === 'inspection_car'
+                    const isSale = op.kind === 'sale'
 
                     return (
                       <tr
@@ -1422,14 +1700,24 @@ export default function DailyShiftClient({
                             <span
                               className={cn(
                                 'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold whitespace-nowrap',
-                                isVisit
+                                isSale
+                                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                                  : isVisit
                                   ? 'bg-violet-50 text-violet-700 border border-violet-200'
                                   : isCarInsp
                                   ? 'bg-sky-50 text-sky-700 border border-sky-200'
                                   : 'bg-teal-50 text-teal-700 border border-teal-200'
                               )}
                             >
-                              {isVisit ? <Car size={13} /> : isCarInsp ? <Search size={13} /> : <Cpu size={13} />}
+                              {isSale ? (
+                                <ShoppingBag size={13} />
+                              ) : isVisit ? (
+                                <Car size={13} />
+                              ) : isCarInsp ? (
+                                <Search size={13} />
+                              ) : (
+                                <Cpu size={13} />
+                              )}
                               {op.kindLabel}
                             </span>
                           </div>
@@ -1441,7 +1729,12 @@ export default function DailyShiftClient({
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-slate-800">{op.vehicleOrSubject}</span>
                               {op.licensePlate && (
-                                <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded text-slate-600 border border-slate-200">
+                                <span className={cn(
+                                  "font-mono text-xs px-2 py-0.5 rounded border",
+                                  isSale
+                                    ? "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                    : "bg-slate-100 text-slate-600 border-slate-200"
+                                )}>
                                   {op.licensePlate}
                                 </span>
                               )}
@@ -1479,7 +1772,9 @@ export default function DailyShiftClient({
                               بايتة (تُحصّل عند التسليم)
                             </span>
                           ) : op.amount > 0 ? (
-                            <span className="text-emerald-600 font-extrabold">{formatCurrency(op.amount)}</span>
+                            <span className={cn("font-extrabold", isSale ? "text-indigo-600" : "text-emerald-600")}>
+                              {formatCurrency(op.amount)}
+                            </span>
                           ) : (
                             <span className="text-slate-400 font-normal">0 IQD</span>
                           )}
@@ -1495,7 +1790,17 @@ export default function DailyShiftClient({
 
                         {/* Action */}
                         <td className="py-3.5 px-3 text-left">
-                          {isVisit ? (
+                          {isSale ? (
+                            <button
+                              type="button"
+                              onClick={() => printSaleReceipt(op.rawItem as DirectSale)}
+                              className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors cursor-pointer"
+                              title="طباعة وصل البيع المباشر"
+                            >
+                              <Printer size={13} />
+                              وصل البيع
+                            </button>
+                          ) : isVisit ? (
                             <Link
                               href={op.detailsHref!}
                               className="inline-flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-bold text-violet-600 bg-violet-50 hover:bg-violet-100 transition-colors"
@@ -1805,6 +2110,302 @@ export default function DailyShiftClient({
                 إغلاق
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* FAST DIRECT SALE MODAL (شغل اليوم) */}
+      {isSaleModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs"
+          onClick={() => setIsSaleModalOpen(false)}
+        >
+          <div
+            className="soft-card bg-white p-6 max-w-lg w-full space-y-5 max-h-[90vh] overflow-y-auto border-2 border-indigo-100 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-sm">
+                  <ShoppingBag size={22} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-slate-800">
+                    تسجيل بيع عقل / مبيعات الورشة
+                  </h3>
+                  <p className="text-xs text-slate-500">إضافة فورية لدخل شفت اليوم وتحديث حصة الفني</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsSaleModalOpen(false)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={e => handleQuickAddSale(e, false)} className="space-y-4">
+              {/* Barcode Scanner Input */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  ضرب باركود العقل (ECU Barcode) - اختياري
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={saleBarcodeInput}
+                    onChange={e => setSaleBarcodeInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        lookupSaleBarcode(saleBarcodeInput)
+                      }
+                    }}
+                    onBlur={() => {
+                      if (saleBarcodeInput.trim()) lookupSaleBarcode(saleBarcodeInput)
+                    }}
+                    placeholder="وجّه الماسح أو اكتب الباركود واضغط Enter..."
+                    className="w-full font-mono text-sm pr-10 pl-24 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 focus:outline-none focus:bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                    dir="ltr"
+                  />
+                  <Scan size={16} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <button
+                    type="button"
+                    onClick={() => lookupSaleBarcode(saleBarcodeInput)}
+                    disabled={isSaleSearchingEcu || !saleBarcodeInput.trim()}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-bold transition-colors cursor-pointer disabled:opacity-40"
+                  >
+                    {isSaleSearchingEcu ? <RefreshCw size={12} className="animate-spin" /> : 'فحص'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Matched ECU Preview */}
+              {saleMatchedEcu && (
+                <div className="p-3.5 rounded-2xl bg-indigo-50/80 border-2 border-indigo-200 text-xs space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-indigo-900 flex items-center gap-1.5">
+                      <CheckCircle2 size={15} className="text-indigo-600" />
+                      تم العثور على العقل في المخزون
+                    </span>
+                    <span className={cn(
+                      'px-2 py-0.5 rounded-md font-bold text-[10px]',
+                      saleMatchedEcu.status === 'sold'
+                        ? 'bg-rose-100 text-rose-800'
+                        : 'bg-emerald-100 text-emerald-800'
+                    )}>
+                      {saleMatchedEcu.status === 'sold' ? '⚠️ مسجل كمباع' : 'متوفر للبيع'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-slate-600 pt-1 border-t border-indigo-200/60">
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">الشركة المصنعة:</span>
+                      <span className="font-bold text-slate-800">{saleMatchedEcu.manufacturer || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">عائلة الوحدة / الفئة:</span>
+                      <span className="font-bold text-slate-800">{saleMatchedEcu.ecu_family || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">كود السيارة:</span>
+                      <span className="font-bold text-slate-800">{saleMatchedEcu.vehicle_model_code || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[10px]">رقم السوفتوير:</span>
+                      <span className="font-bold text-slate-800">{saleMatchedEcu.software_id || '—'}</span>
+                    </div>
+                  </div>
+                  {saleMatchedEcu.shelf_location && (
+                    <div className="text-[11px] text-indigo-700 font-semibold bg-white/70 px-2 py-1 rounded-lg">
+                      موقع الرف في الورشة: <strong>{saleMatchedEcu.shelf_location}</strong>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Quick Preset Chips */}
+              <div>
+                <span className="block text-xs font-bold text-slate-600 mb-1.5">
+                  أو اختر صنف سريع بدون باركود (فيشة، ملف، برمجة):
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {QUICK_SALE_ITEMS.map(ci => (
+                    <button
+                      key={ci.label}
+                      type="button"
+                      onClick={() => {
+                        setSaleMatchedEcu(null)
+                        setSaleBarcodeInput('')
+                        setSaleItemName(ci.label)
+                        setSalePrice(String(ci.price))
+                      }}
+                      className={cn(
+                        'px-2.5 py-1 rounded-xl text-xs font-semibold transition-all border cursor-pointer',
+                        saleItemName === ci.label
+                          ? 'bg-indigo-600 text-white border-indigo-700 shadow-sm'
+                          : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                      )}
+                    >
+                      <span>{ci.icon} {ci.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Item Name */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  اسم الصنف المباع <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={saleItemName}
+                  onChange={e => setSaleItemName(e.target.value)}
+                  placeholder="مثال: عقل سنتافي SIM2K-241، فيشة كمبيوتر، إلخ..."
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  required
+                />
+              </div>
+
+              {/* Price IQD with quick increment chips */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  سعر البيع (د.ع) <span className="text-rose-500">*</span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={salePrice ? Number(salePrice).toLocaleString('en-US') : ''}
+                    onChange={e => {
+                      const raw = parseArabicNumerals(e.target.value).replace(/,/g, '').trim()
+                      setSalePrice(raw)
+                    }}
+                    placeholder="0"
+                    dir="ltr"
+                    className="w-full font-mono text-xl font-bold pr-4 pl-16 py-2.5 rounded-xl border border-slate-200 bg-white text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                    required
+                  />
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 font-mono">
+                    IQD
+                  </span>
+                </div>
+
+                {/* Quick Increments */}
+                <div className="flex flex-wrap gap-1.5 mt-2">
+                  {[10000, 25000, 50000, 100000, 250000].map(inc => (
+                    <button
+                      key={inc}
+                      type="button"
+                      onClick={() => {
+                        const cur = Number(salePrice) || 0
+                        setSalePrice(String(cur + inc))
+                      }}
+                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer"
+                    >
+                      +{inc.toLocaleString('en-US')}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setSalePrice('')}
+                    className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+                  >
+                    مسح
+                  </button>
+                </div>
+              </div>
+
+              {/* Technician Dropdown */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  الفني المسؤول عن البيع
+                </label>
+                <select
+                  value={saleTech}
+                  onChange={e => setSaleTech(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                >
+                  {TECHNICIANS.map(t => (
+                    <option key={t} value={t}>
+                      🔧 {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Buyer Name & Phone */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    اسم المشتري (اختياري)
+                  </label>
+                  <input
+                    type="text"
+                    value={saleBuyerName}
+                    onChange={e => setSaleBuyerName(e.target.value)}
+                    placeholder="زبون نقدي / الورشة"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                    رقم الهاتف (اختياري)
+                  </label>
+                  <input
+                    type="tel"
+                    value={saleBuyerPhone}
+                    onChange={e => setSaleBuyerPhone(parseArabicNumerals(e.target.value))}
+                    placeholder="07XXXXXXXX"
+                    dir="ltr"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 bg-white text-sm font-mono text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  ملاحظات إضافية (اختياري)
+                </label>
+                <input
+                  type="text"
+                  value={saleNotes}
+                  onChange={e => setSaleNotes(e.target.value)}
+                  placeholder="رقم الفيشة، تفاصيل الضمان، كود الفحص، إلخ..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-xs text-slate-800 focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Modal Actions */}
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setIsSaleModalOpen(false)}
+                  disabled={isSubmittingSale}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={e => handleQuickAddSale(e, true)}
+                  disabled={isSubmittingSale}
+                  className="px-4 py-2.5 rounded-xl bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-xs font-extrabold flex items-center gap-1.5 transition-colors cursor-pointer border border-indigo-200 disabled:opacity-50"
+                >
+                  <Printer size={14} />
+                  <span>حفظ وطباعة الوصل 🖨️</span>
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingSale}
+                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-md shadow-indigo-600/20 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <ShoppingBag size={14} />
+                  <span>{isSubmittingSale ? 'جاري التسجيل...' : 'حفظ البيع فقط ✅'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

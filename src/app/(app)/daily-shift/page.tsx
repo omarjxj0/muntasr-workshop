@@ -3,7 +3,7 @@ import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import DailyShiftClient, { type DailyExpenseItem } from './DailyShiftClient'
 import { isBaghdadToday } from '@/lib/utils'
-import type { Profile } from '@/lib/types'
+import type { Profile, DirectSale } from '@/lib/types'
 
 export const metadata: Metadata = {
   title: 'شغل اليوم · سجل العمل اليومي وتوزيع الفنيين',
@@ -24,10 +24,11 @@ export default async function DailyShiftPage() {
     .eq('id', user.id)
     .single<Profile>()
 
-  // Fetch recent visits, quick inspections, expenses, and daily wages
+  // Fetch recent visits, quick inspections, direct sales, expenses, and daily wages
   const [
     { data: rawVisits, error: visitsErr },
     { data: rawInspections, error: inspErr },
+    { data: rawSales, error: salesErr },
     { data: rawExpenses, error: expErr },
     { data: rawWages, error: wagesErr },
   ] = await Promise.all([
@@ -49,6 +50,11 @@ export default async function DailyShiftPage() {
       .order('created_at', { ascending: false })
       .limit(400),
     supabase
+      .from('direct_sales')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(300),
+    supabase
       .from('expenses')
       .select('*')
       .order('created_at', { ascending: false })
@@ -68,6 +74,9 @@ export default async function DailyShiftPage() {
   }
   if (inspErr) {
     console.error('Daily Shift Inspections Fetch Error:', inspErr)
+  }
+  if (salesErr) {
+    console.error('Daily Shift Sales Fetch Error:', salesErr)
   }
   if (expErr) {
     console.error('Daily Shift Expenses Fetch Error:', expErr)
@@ -96,6 +105,7 @@ export default async function DailyShiftPage() {
   }) as any[]
 
   const todayInspections = (rawInspections || []).filter(qi => isBaghdadToday(qi.created_at)) as any[]
+  const todaySales = (rawSales || []).filter(s => isBaghdadToday(s.created_at)) as DirectSale[]
 
   // Operational expenses registered today in Baghdad timezone
   const todayExpenses: DailyExpenseItem[] = (rawExpenses || [])
@@ -127,6 +137,7 @@ export default async function DailyShiftPage() {
       role={profile?.role ?? 'technician'}
       initialVisits={todayVisits}
       initialInspections={todayInspections}
+      initialSales={todaySales}
       initialExpenses={todayExpenses}
       initialWages={todayWages}
     />
