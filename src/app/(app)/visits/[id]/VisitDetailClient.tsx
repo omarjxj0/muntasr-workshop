@@ -15,6 +15,7 @@ import toast from 'react-hot-toast'
 import VoiceComplaintField from './VoiceComplaintField'
 import VisitImages from './VisitImages'
 import ThermalReceipt from './ThermalReceipt'
+import { printThermalMiniReceipt } from '@/lib/printThermalMiniReceipt'
 
 interface Props {
   visitId: string
@@ -211,6 +212,25 @@ export default function VisitDetailClient({ visitId, role }: Props) {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank')
   }
 
+  const handleThermalPrint = () => {
+    if (!visit) return
+    const currentLabor = parseAmount(laborCostInput) || Number(visit.labor_cost) || 0
+    printThermalMiniReceipt({
+      mode: 'visit',
+      sequenceNumber: visit.id?.slice(0, 6).toUpperCase(),
+      createdAt: visit.delivered_at || visit.created_at || new Date().toISOString(),
+      customerName: customer?.name || null,
+      phone: customer?.phone || null,
+      vehicleInfo: [
+        vehicle?.make_and_model,
+        vehicle?.license_plate && vehicle.license_plate !== '—' ? vehicle.license_plate : null,
+      ].filter(Boolean).join(' • ') || '—',
+      technicianName: technicianName || visit.technician_name || null,
+      faultCodes: visit.complaint || null,
+      laborCost: currentLabor,
+    })
+  }
+
   if (!visit) return (
     <div className="flex items-center justify-center min-h-64">
       <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: '#7c3aed', borderTopColor: 'transparent' }} />
@@ -234,6 +254,13 @@ export default function VisitDetailClient({ visitId, role }: Props) {
             className="inline-flex items-center gap-2 bg-[#25D366] hover:bg-[#20bd5a] text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors shadow-sm cursor-pointer"
           >
             📱 إرسال واتساب
+          </button>
+          <button
+            onClick={handleThermalPrint}
+            className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-colors shadow-sm cursor-pointer"
+            title="طباعة وصل حراري 50mm"
+          >
+            🧾 وصل حراري (50mm)
           </button>
           <button
             onClick={() => window.print()}

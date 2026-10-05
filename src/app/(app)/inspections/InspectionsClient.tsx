@@ -13,6 +13,7 @@ import { formatDate, formatCurrency, parseAmount, parseArabicNumerals, cn } from
 import { TECHNICIANS } from '@/lib/constants'
 import toast from 'react-hot-toast'
 import type { QuickInspection, InspectionType, ImageEntry } from '@/lib/types'
+import { printThermalMiniReceipt } from '@/lib/printThermalMiniReceipt'
 
 const BUCKET = 'inspection_images'
 
@@ -343,6 +344,20 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
       toast.success('تم حذف السجل')
     } catch (err: any) { toast.error('فشل الحذف: ' + err?.message)
     } finally { setDeletingId(null) }
+  }
+
+  function handleThermalPrint(record: QuickInspection, index: number) {
+    printThermalMiniReceipt({
+      mode: 'inspection',
+      sequenceNumber: index + 1,
+      createdAt: record.created_at,
+      customerName: record.customer_name || 'زبون فحص',
+      phone: record.phone,
+      subjectInfo: record.subject || record.car_info || record.ecu_info || '—',
+      technicianName: record.technician_name,
+      faultCodes: record.fault_codes,
+      fee: record.inspection_fee || 0,
+    })
   }
 
   async function handlePrint(record: QuickInspection) {
@@ -749,6 +764,14 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <button onClick={() => handlePrint(record)} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 transition-all active:scale-95 cursor-pointer">
                           <Printer size={15} /> طباعة التقرير
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleThermalPrint(record, index)}
+                          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition-all active:scale-95 cursor-pointer"
+                          title="طباعة وصل حراري صغير (50mm)"
+                        >
+                          🧾 وصل حراري (50mm)
                         </button>
                         <button
                           type="button"

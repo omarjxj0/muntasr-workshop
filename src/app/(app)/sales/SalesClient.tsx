@@ -18,6 +18,7 @@ import {
   cn
 } from '@/lib/utils'
 import { printSaleReceipt } from '@/lib/printSaleReceipt'
+import { printThermalMiniReceipt } from '@/lib/printThermalMiniReceipt'
 import type { DirectSale, UserRole, Ecu } from '@/lib/types'
 import toast from 'react-hot-toast'
 
@@ -600,7 +601,6 @@ export default function SalesClient({ role, initialSales }: SalesClientProps) {
               />
             </div>
 
-            {/* Actions */}
             <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
               <button
                 type="submit"
@@ -629,6 +629,67 @@ export default function SalesClient({ role, initialSales }: SalesClientProps) {
               >
                 <Printer size={16} />
                 بيع وطباعة وصل 🖨️
+              </button>
+
+              <button
+                type="button"
+                onClick={async (e) => {
+                  // Submit sale then print thermal mini-receipt
+                  const price = parseAmount(sellingPrice)
+                  if (!itemName.trim() || price <= 0) {
+                    handleSubmitSale(e, false)
+                    return
+                  }
+                  setIsSubmitting(true)
+                  try {
+                    const payload = {
+                      item_type: matchedEcu ? 'ecu' : 'accessory_or_file',
+                      ecu_id: matchedEcu ? matchedEcu.id : null,
+                      item_name: itemName.trim(),
+                      customer_name: buyerName.trim() || null,
+                      phone: buyerPhone.trim() || null,
+                      selling_price: price,
+                      technician_name: technicianName || null,
+                      notes: notes.trim() || null,
+                    }
+                    const { data, error } = await supabase
+                      .from('direct_sales')
+                      .insert(payload as any)
+                      .select()
+                      .single()
+                    if (error) throw error
+                    if (matchedEcu) {
+                      await supabase
+                        .from('ecus')
+                        .update({ status: 'sold', stock_quantity: 0 } as any)
+                        .eq('id', matchedEcu.id)
+                    }
+                    const newSale = data as DirectSale
+                    setSales(prev => [newSale, ...prev])
+                    printThermalMiniReceipt({
+                      mode: 'sale',
+                      sequenceNumber: newSale.id?.slice(0, 6).toUpperCase(),
+                      createdAt: newSale.created_at || new Date().toISOString(),
+                      customerName: newSale.customer_name || null,
+                      phone: newSale.phone || null,
+                      itemName: newSale.item_name || itemName,
+                      technicianName: newSale.technician_name || null,
+                      notes: newSale.notes || null,
+                      totalAmount: price,
+                    })
+                    toast.success('تم تسجيل عملية البيع بنجاح! 🛝')
+                    resetForm()
+                  } catch (err: any) {
+                    toast.error('فشل في إتمام عملية البيع: ' + (err.message || 'خطأ غير متوقع'))
+                  } finally {
+                    setIsSubmitting(false)
+                  }
+                }}
+                disabled={isSubmitting}
+                className="py-3 px-4 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold transition-all shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50 active:scale-98"
+                title="إتمام البيع وطباعة وصل حراري 50mm"
+              >
+                🧾 بيع ووصل حراري
               </button>
             </div>
           </form>
@@ -826,9 +887,28 @@ export default function SalesClient({ role, initialSales }: SalesClientProps) {
                                 createdAt: sale.created_at,
                               })}
                               className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 transition-colors cursor-pointer"
-                              title="طباعة وصل البيع"
+                              title="طباعة وصل البيع (A4)"
                             >
                               <Printer size={16} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => printThermalMiniReceipt({
+                                mode: 'sale',
+                                sequenceNumber: seqNumber,
+                                createdAt: sale.created_at,
+                                customerName: sale.customer_name || null,
+                                phone: sale.phone || null,
+                                itemName: sale.item_name || '—',
+                                technicianName: sale.technician_name || null,
+                                notes: sale.notes || null,
+                                totalAmount: Number(sale.selling_price) || 0,
+                              })}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-orange-600 hover:bg-orange-50 transition-colors cursor-pointer"
+                              title="وصل حراري 50mm"
+                            >
+                              🧾
                             </button>
 
                             {(role === 'admin' || isBaghdadToday(sale.created_at)) && (
