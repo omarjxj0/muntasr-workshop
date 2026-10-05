@@ -5,7 +5,7 @@ import Link from 'next/link'
 import {
   Flame, Car, Cpu, Wrench, Search, X, Calendar, DollarSign,
   CheckCircle2, Clock, Filter, Printer, ExternalLink, RefreshCw,
-  TrendingUp, TrendingDown, Activity, User, Phone, AlertCircle, ChevronLeft,
+  TrendingUp, TrendingDown, Activity, User, Phone, AlertCircle, ChevronLeft, ChevronRight,
   Wallet, Receipt, Plus, Trash2, ArrowDownRight, ArrowUpRight, Coins, Sparkles,
   ShoppingBag, Scan, Tag
 } from 'lucide-react'
@@ -19,6 +19,8 @@ import {
   cn,
   VISIT_STATUS_LABELS,
   VISIT_STATUS_COLORS,
+  getBaghdadDateKey,
+  getBaghdadTodayKey,
 } from '@/lib/utils'
 import { TECHNICIANS } from '@/lib/constants'
 import type { VisitStatus, UserRole, DirectSale, Ecu } from '@/lib/types'
@@ -91,11 +93,11 @@ export interface UnifiedOperation {
 
 interface Props {
   role: UserRole
-  initialVisits: DailyVisitItem[]
-  initialInspections: DailyInspectionItem[]
-  initialSales?: DirectSale[]
-  initialExpenses?: DailyExpenseItem[]
-  initialWages?: DailyExpenseItem[]
+  allVisits: DailyVisitItem[]
+  allInspections: DailyInspectionItem[]
+  allSales?: DirectSale[]
+  allExpenses?: DailyExpenseItem[]
+  allWages?: DailyExpenseItem[]
 }
 
 const EXPENSE_CATEGORIES = [
@@ -115,24 +117,77 @@ const QUICK_SALE_ITEMS = [
   { label: 'فيشة حساس أوكسجين / كام', price: 20000, icon: '🏷️' },
 ]
 
+// ── Date Helpers ─────────────────────────────────────────────
+function getTodayDateString(): string {
+  return getBaghdadTodayKey()
+}
+
+function isSameBaghdadDay(dateStr: string | Date | null | undefined, targetDay: string): boolean {
+  if (!dateStr) return false
+  const { dayKey } = getBaghdadDateKey(dateStr)
+  return dayKey === targetDay
+}
+
+function addDays(dateStr: string, delta: number): string {
+  // Parse the YYYY-MM-DD string safely without timezone shifting
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() + delta)
+  const yy = dt.getFullYear()
+  const mm = String(dt.getMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
+
 export default function DailyShiftClient({
   role,
-  initialVisits,
-  initialInspections,
-  initialSales = [],
-  initialExpenses = [],
-  initialWages = []
+  allVisits,
+  allInspections,
+  allSales = [],
+  allExpenses = [],
+  allWages = []
 }: Props) {
   const supabase = createClient()
 
-  // State
+  // ── Date Navigation State ────────────────────────────────────
+  const [selectedDate, setSelectedDate] = useState<string>(() => getTodayDateString())
+  const todayKey = getTodayDateString()
+  const isViewingToday = selectedDate === todayKey
+
+  // Format selected date for display (full Arabic name)
+  const selectedDateFormatted = useMemo(() => {
+    const [y, m, d] = selectedDate.split('-').map(Number)
+    // Construct a noon-time Date in local time to avoid any UTC midnight ambiguities
+    return formatFullBaghdadDate(new Date(y, m - 1, d, 12, 0, 0))
+  }, [selectedDate])
+
   const [selectedTech, setSelectedTech] = useState<string | null>(null)
   const [filterKind, setFilterKind] = useState<'all' | 'visit' | 'inspection' | 'sale' | 'expense'>('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [previewInspection, setPreviewInspection] = useState<DailyInspectionItem | null>(null)
 
-  // Direct Sales State
-  const [sales, setSales] = useState<DirectSale[]>(() => initialSales)
+  // ── Client-side date filtering (drives all metrics) ──────────
+  const initialVisits = useMemo(() => {
+    return allVisits.filter(v => {
+      const isDeliveredOrCompleted = v.status === 'Completed' || v.status === 'Delivered'
+      const settlementDate = v.delivered_at || v.completed_at || v.entry_date
+      if (isDeliveredOrCompleted && isSameBaghdadDay(settlementDate, selectedDate)) return true
+      const isActive = v.status === 'Pending' || v.status === 'In Progress'
+      if (isActive && isSameBaghdadDay(v.entry_date, selectedDate)) return true
+      return false
+    })
+  }, [allVisits, selectedDate])
+
+  const initialInspections = useMemo(() => {
+    return allInspections.filter(qi => isSameBaghdadDay(qi.created_at, selectedDate))
+  }, [allInspections, selectedDate])
+
+  // Direct Sales State — filtered by selectedDate
+  const [allSalesState, setAllSalesState] = useState<DirectSale[]>(() => allSales)
+  const sales = useMemo(
+    () => allSalesState.filter(s => isSameBaghdadDay(s.created_at, selectedDate)),
+    [allSalesState, selectedDate]
+  )
 
   // Fast Direct Sale Modal State
   const [isSaleModalOpen, setIsSaleModalOpen] = useState(false)
@@ -147,18 +202,20 @@ export default function DailyShiftClient({
   const [saleNotes, setSaleNotes] = useState('')
   const [isSubmittingSale, setIsSubmittingSale] = useState(false)
 
-  // Expenses State (local update for instant UI responsiveness)
-  const [expenses, setExpenses] = useState<DailyExpenseItem[]>(() =>
-    initialExpenses.map(e => ({
-      ...e,
-      amount: Math.round(Number(e.amount) || 0)
-    }))
+  // Expenses State — filtered by selectedDate
+  const [allExpensesState, setAllExpensesState] = useState<DailyExpenseItem[]>(() =>
+    allExpenses.map(e => ({ ...e, amount: Math.round(Number(e.amount) || 0) }))
   )
-  const [wages, setWages] = useState<DailyExpenseItem[]>(() =>
-    initialWages.map(w => ({
-      ...w,
-      amount: Math.round(Number(w.amount) || 0)
-    }))
+  const [allWagesState, setAllWagesState] = useState<DailyExpenseItem[]>(() =>
+    allWages.map(w => ({ ...w, amount: Math.round(Number(w.amount) || 0) }))
+  )
+  const expenses = useMemo(
+    () => allExpensesState.filter(e => isSameBaghdadDay(e.created_at, selectedDate)),
+    [allExpensesState, selectedDate]
+  )
+  const wages = useMemo(
+    () => allWagesState.filter(w => isSameBaghdadDay(w.created_at, selectedDate)),
+    [allWagesState, selectedDate]
   )
 
   // Quick Expense Modal State
@@ -256,7 +313,7 @@ export default function DailyShiftClient({
       }
 
       const newSale = data as DirectSale
-      setSales(prev => [newSale, ...prev])
+      setAllSalesState(prev => [newSale, ...prev])
       toast.success('تم تسجيل البيع وإضافته إلى دخل شفت اليوم! 🛒')
 
       if (printAfter) {
@@ -571,7 +628,7 @@ export default function DailyShiftClient({
           recipientName: expenseWorker !== 'عام / الورشة' ? expenseWorker : null,
         }
 
-        setExpenses(prev => [newExpenseItem, ...prev])
+        setAllExpensesState(prev => [newExpenseItem, ...prev])
         toast.success(`تم تسجيل صرفية بقيمة ${formatCurrency(parsed)} وتحديث صافي الشفت بنجاح ✅`)
 
         // Reset and close
@@ -599,7 +656,7 @@ export default function DailyShiftClient({
       if (error) {
         toast.error('حدث خطأ أثناء حذف الصرفية')
       } else {
-        setExpenses(prev => prev.filter(e => e.id !== id))
+        setAllExpensesState(prev => prev.filter(e => e.id !== id))
         toast.success('تم حذف الصرفية وتحديث صافي الربح بنجاح ✅')
       }
     } catch (err) {
@@ -617,7 +674,7 @@ export default function DailyShiftClient({
       return
     }
 
-    const todayDateStr = formatFullBaghdadDate()
+    const todayDateStr = selectedDateFormatted
     const nowTimeStr = formatTimeBaghdad(new Date())
 
     // Technicians rows
@@ -1070,19 +1127,82 @@ export default function DailyShiftClient({
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-800 tracking-tight">
-                  شغل اليوم · سجل العمل اليومي
+                  {isViewingToday ? 'شغل اليوم · سجل العمل اليومي' : 'أرشيف الشفت · سجل العمل اليومي'}
                 </h1>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-                  مباشر · توقيت بغداد
-                </span>
+                {isViewingToday ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                    مباشر · توقيت بغداد
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                    <Clock size={12} className="text-indigo-600" />
+                    سجل أرشيف شفت سابق
+                  </span>
+                )}
               </div>
-              <p className="text-xs sm:text-sm text-slate-500 mt-1 flex items-center gap-2">
-                <Calendar size={14} className="text-amber-500" />
-                <span>{formatFullBaghdadDate()}</span>
-                <span>•</span>
-                <span>توزيع المهام ومحاسبة الشفت وصافي الأرباح</span>
-              </p>
+
+              {/* Interactive Date Navigator Toolbar */}
+              <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+                <div className="inline-flex items-center bg-white border border-slate-200 rounded-xl shadow-sm p-1 gap-1">
+                  {/* Previous Day Button */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(prev => addDays(prev, -1))}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer active:scale-95"
+                    title="اليوم السابق"
+                  >
+                    <span>اليوم السابق ◀</span>
+                  </button>
+
+                  <div className="h-4 w-px bg-slate-200" />
+
+                  {/* Date Input with Calendar */}
+                  <div className="flex items-center gap-1.5 px-2 py-0.5">
+                    <Calendar size={14} className="text-amber-500 shrink-0" />
+                    <span className="text-xs font-bold text-slate-800 hidden sm:inline whitespace-nowrap">
+                      {selectedDateFormatted}
+                    </span>
+                    <input
+                      type="date"
+                      value={selectedDate}
+                      onChange={e => {
+                        if (e.target.value) {
+                          setSelectedDate(e.target.value)
+                        }
+                      }}
+                      className="text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md px-2 py-1 cursor-pointer transition-colors focus:outline-none focus:border-amber-500 focus:bg-white"
+                      dir="ltr"
+                      title="اختر تاريخاً محدداً"
+                    />
+                  </div>
+
+                  <div className="h-4 w-px bg-slate-200" />
+
+                  {/* Next Day Button */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(prev => addDays(prev, 1))}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-100 hover:text-slate-900 transition-colors cursor-pointer active:scale-95"
+                    title="اليوم التالي"
+                  >
+                    <span>اليوم التالي ▶</span>
+                  </button>
+                </div>
+
+                {/* Return to Today Button */}
+                {!isViewingToday && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDate(todayKey)}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500 hover:bg-amber-600 text-white shadow-sm transition-all cursor-pointer active:scale-95"
+                    title="الرجوع إلى شفت اليوم الحالي"
+                  >
+                    <RefreshCw size={12} />
+                    <span>اليوم الحالي</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1130,6 +1250,33 @@ export default function DailyShiftClient({
           </Link>
         </div>
       </div>
+
+      {/* Historical Shift Alert Banner */}
+      {!isViewingToday && (
+        <div className="bg-gradient-to-r from-amber-50 to-indigo-50/70 border border-amber-200/90 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-amber-500/30">
+              <Calendar size={20} />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-slate-800">
+                أنت تستعرض حالياً سجل شفت تاريخ: <span className="text-amber-800 underline font-black">{selectedDateFormatted}</span> <span className="font-mono text-xs text-slate-500">({selectedDate})</span>
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                كافة العمليات الحسابية والفحوصات والصرفيات وأجور العمل المعروضة أدناه خاصة بهذا اليوم تحديداً.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setSelectedDate(todayKey)}
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition-all shadow-sm shrink-0 self-start sm:self-auto cursor-pointer active:scale-95"
+          >
+            <RefreshCw size={13} />
+            <span>العودة لشفت اليوم المباشر</span>
+          </button>
+        </div>
+      )}
 
       {/* Top Metric Cards (Requirements 2) */}
       <div className="space-y-4">

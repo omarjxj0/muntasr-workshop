@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import type { Metadata } from 'next'
 import DailyShiftClient, { type DailyExpenseItem } from './DailyShiftClient'
-import { isBaghdadToday } from '@/lib/utils'
+
 import type { Profile, DirectSale } from '@/lib/types'
 
 export const metadata: Metadata = {
@@ -43,22 +43,22 @@ export default async function DailyShiftPage() {
         )
       `)
       .order('entry_date', { ascending: false })
-      .limit(400),
+      .limit(600),
     supabase
       .from('quick_inspections')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(400),
+      .limit(600),
     supabase
       .from('direct_sales')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(300),
+      .limit(500),
     supabase
       .from('expenses')
       .select('*')
       .order('created_at', { ascending: false })
-      .limit(300),
+      .limit(500),
     supabase
       .from('daily_wages')
       .select(`
@@ -66,7 +66,7 @@ export default async function DailyShiftPage() {
         employees ( name )
       `)
       .order('date', { ascending: false })
-      .limit(100),
+      .limit(200),
   ])
 
   if (visitsErr) {
@@ -85,61 +85,38 @@ export default async function DailyShiftPage() {
     console.warn('Daily Shift Wages Fetch Warning (may require admin):', wagesErr)
   }
 
-  // Filter strictly for today in Baghdad timezone (Asia/Baghdad)
-  // - Delivered/Completed visits settled TODAY (using delivered_at || completed_at || entry_date)
-  // - Active/Overnight visits entered TODAY
-  const todayVisits = (rawVisits || []).filter(v => {
-    const isDeliveredOrCompleted = v.status === 'Completed' || v.status === 'Delivered'
-    const settlementDate = v.delivered_at || v.completed_at || v.entry_date
+  // Pass raw data to client — client filters by selectedDate
+  const allVisits = (rawVisits || []) as any[]
+  const allInspections = (rawInspections || []) as any[]
+  const allSales = (rawSales || []) as DirectSale[]
 
-    if (isDeliveredOrCompleted && isBaghdadToday(settlementDate)) {
-      return true
-    }
+  const allExpenses: DailyExpenseItem[] = (rawExpenses || []).map(e => ({
+    id: e.id,
+    amount: Math.round(Number(e.amount) || 0),
+    description: e.description || 'مصروف تشغيلي',
+    category: e.category || 'أخرى',
+    created_at: e.created_at,
+    isWage: false,
+  }))
 
-    const isActive = v.status === 'Pending' || v.status === 'In Progress'
-    if (isActive && isBaghdadToday(v.entry_date)) {
-      return true
-    }
-
-    return false
-  }) as any[]
-
-  const todayInspections = (rawInspections || []).filter(qi => isBaghdadToday(qi.created_at)) as any[]
-  const todaySales = (rawSales || []).filter(s => isBaghdadToday(s.created_at)) as DirectSale[]
-
-  // Operational expenses registered today in Baghdad timezone
-  const todayExpenses: DailyExpenseItem[] = (rawExpenses || [])
-    .filter(e => isBaghdadToday(e.created_at))
-    .map(e => ({
-      id: e.id,
-      amount: Math.round(Number(e.amount) || 0),
-      description: e.description || 'مصروف تشغيلي',
-      category: e.category || 'أخرى',
-      created_at: e.created_at,
-      isWage: false,
-    }))
-
-  // Daily wages registered today in Baghdad timezone
-  const todayWages: DailyExpenseItem[] = (rawWages || [])
-    .filter(w => isBaghdadToday(w.date))
-    .map(w => ({
-      id: w.id,
-      amount: Math.round(Number(w.amount) || 0),
-      description: `أجر يومي - ${(w.employees as any)?.name || 'فني / موظف'}`,
-      category: 'أجور ورواتب',
-      created_at: w.date,
-      isWage: true,
-      recipientName: (w.employees as any)?.name || null,
-    }))
+  const allWages: DailyExpenseItem[] = (rawWages || []).map(w => ({
+    id: w.id,
+    amount: Math.round(Number(w.amount) || 0),
+    description: `أجر يومي - ${(w.employees as any)?.name || 'فني / موظف'}`,
+    category: 'أجور ورواتب',
+    created_at: w.date,
+    isWage: true,
+    recipientName: (w.employees as any)?.name || null,
+  }))
 
   return (
     <DailyShiftClient
       role={profile?.role ?? 'technician'}
-      initialVisits={todayVisits}
-      initialInspections={todayInspections}
-      initialSales={todaySales}
-      initialExpenses={todayExpenses}
-      initialWages={todayWages}
+      allVisits={allVisits}
+      allInspections={allInspections}
+      allSales={allSales}
+      allExpenses={allExpenses}
+      allWages={allWages}
     />
   )
 }
