@@ -21,6 +21,7 @@ import {
   VISIT_STATUS_COLORS,
   getBaghdadDateKey,
   getBaghdadTodayKey,
+  baghdadInputToISOString,
 } from '@/lib/utils'
 import { TECHNICIANS } from '@/lib/constants'
 import type { VisitStatus, UserRole, DirectSale, Ecu } from '@/lib/types'
@@ -200,6 +201,7 @@ export default function DailyShiftClient({
   const [saleBuyerPhone, setSaleBuyerPhone] = useState('')
   const [saleTech, setSaleTech] = useState<string>(TECHNICIANS[0] || 'منتصر')
   const [saleNotes, setSaleNotes] = useState('')
+  const [saleDate, setSaleDate] = useState<string>(() => selectedDate || getTodayDateString())
   const [isSubmittingSale, setIsSubmittingSale] = useState(false)
 
   // Expenses State — filtered by selectedDate
@@ -220,6 +222,7 @@ export default function DailyShiftClient({
 
   // Quick Expense Modal State
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false)
+  const [expenseDate, setExpenseDate] = useState<string>(() => selectedDate || getTodayDateString())
   const [expenseAmount, setExpenseAmount] = useState('')
   const [expenseCategory, setExpenseCategory] = useState('ضيافة ونثريات')
   const [expenseDescription, setExpenseDescription] = useState('')
@@ -286,6 +289,11 @@ export default function DailyShiftClient({
 
     setIsSubmittingSale(true)
     try {
+      const isToday = saleDate === todayKey
+      const saleCreatedAtIso = isToday
+        ? new Date().toISOString()
+        : baghdadInputToISOString(saleDate)
+
       const payload = {
         item_type: saleMatchedEcu ? 'ecu' : 'accessory_or_file',
         ecu_id: saleMatchedEcu ? saleMatchedEcu.id : null,
@@ -295,6 +303,7 @@ export default function DailyShiftClient({
         selling_price: price,
         technician_name: saleTech || null,
         notes: saleNotes.trim() || null,
+        created_at: saleCreatedAtIso,
       }
 
       const { data, error } = await supabase
@@ -314,7 +323,9 @@ export default function DailyShiftClient({
 
       const newSale = data as DirectSale
       setAllSalesState(prev => [newSale, ...prev])
-      toast.success('تم تسجيل البيع وإضافته إلى دخل شفت اليوم! 🛒')
+      const isBackdated = !isSameBaghdadDay(newSale.created_at, todayKey)
+      const dayLabel = isBackdated ? `بتاريخ (${saleDate})` : 'إلى دخل شفت اليوم'
+      toast.success(`تم تسجيل البيع وإضافته ${dayLabel}! 🛒`)
 
       if (printAfter) {
         printSaleReceipt({
@@ -603,6 +614,12 @@ export default function DailyShiftClient({
     const extraNote = expenseNote.trim() ? ` [${expenseNote.trim()}]` : ''
     const fullDescription = `${expenseDescription.trim()}${recipientTag}${extraNote}`
 
+    // Calculate created_at based on expenseDate
+    const isToday = expenseDate === todayKey
+    const createdAtIso = isToday
+      ? new Date().toISOString()
+      : baghdadInputToISOString(expenseDate)
+
     try {
       const { data, error } = await supabase
         .from('expenses')
@@ -610,6 +627,7 @@ export default function DailyShiftClient({
           amount: parsed,
           category: expenseCategory,
           description: fullDescription,
+          created_at: createdAtIso,
         })
         .select()
         .single()
@@ -629,7 +647,9 @@ export default function DailyShiftClient({
         }
 
         setAllExpensesState(prev => [newExpenseItem, ...prev])
-        toast.success(`تم تسجيل صرفية بقيمة ${formatCurrency(parsed)} وتحديث صافي الشفت بنجاح ✅`)
+        const isBackdated = !isSameBaghdadDay(data.created_at, todayKey)
+        const dayLabel = isBackdated ? `بتاريخ (${expenseDate})` : 'لشفت اليوم'
+        toast.success(`تم تسجيل صرفية بقيمة ${formatCurrency(parsed)} ${dayLabel} وتحديث صافي الشفت بنجاح ✅`)
 
         // Reset and close
         setExpenseAmount('')
@@ -1220,7 +1240,10 @@ export default function DailyShiftClient({
 
           {/* Quick Action Button: + صرفية جديدة (Requirement 3) */}
           <button
-            onClick={() => setIsExpenseModalOpen(true)}
+            onClick={() => {
+              setExpenseDate(selectedDate || todayKey)
+              setIsExpenseModalOpen(true)
+            }}
             className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-bold transition-all shadow-sm shadow-rose-600/25 cursor-pointer active:scale-95"
           >
             <Plus size={16} />
@@ -1229,7 +1252,10 @@ export default function DailyShiftClient({
 
           {/* Quick Action Button: + بيع عقل / مبيعات (Requirement 2) */}
           <button
-            onClick={() => setIsSaleModalOpen(true)}
+            onClick={() => {
+              setSaleDate(selectedDate || todayKey)
+              setIsSaleModalOpen(true)
+            }}
             className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-all shadow-sm shadow-indigo-600/25 cursor-pointer active:scale-95"
           >
             <ShoppingBag size={16} />
@@ -2009,6 +2035,72 @@ export default function DailyShiftClient({
 
             {/* Modal Form */}
             <form onSubmit={handleQuickAddExpense} className="space-y-4">
+              {/* Expense Date Picker (Backdating Support) */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Calendar size={14} className="text-rose-600" />
+                    <span>تاريخ الصرفية <span className="text-rose-500">*</span></span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setExpenseDate(todayKey)}
+                      className={cn(
+                        'px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer border',
+                        expenseDate === todayKey
+                          ? 'bg-rose-50 text-rose-700 border-rose-300'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                      )}
+                    >
+                      اليوم
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpenseDate(addDays(todayKey, -1))}
+                      className={cn(
+                        'px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer border',
+                        expenseDate === addDays(todayKey, -1)
+                          ? 'bg-amber-50 text-amber-700 border-amber-300'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                      )}
+                    >
+                      أمس
+                    </button>
+                    {selectedDate !== todayKey && selectedDate !== addDays(todayKey, -1) && (
+                      <button
+                        type="button"
+                        onClick={() => setExpenseDate(selectedDate)}
+                        className={cn(
+                          'px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer border',
+                          expenseDate === selectedDate
+                            ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
+                            : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                        )}
+                      >
+                        شفت المعاينة ({selectedDate})
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <input
+                  type="date"
+                  value={expenseDate}
+                  onChange={e => setExpenseDate(e.target.value)}
+                  className={`w-full ${inputClass} bg-white text-xs font-mono`}
+                  dir="ltr"
+                  required
+                />
+                {expenseDate !== todayKey && (
+                  <p className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200/80 px-2.5 py-1 rounded-lg flex items-center gap-1.5">
+                    <AlertCircle size={12} className="shrink-0" />
+                    <span>
+                      سيتم تسجيل الصرفية بتاريخ ({expenseDate}) وخصمها من شفت وأرباح ذلك اليوم تلقائياً.
+                    </span>
+                  </p>
+                )}
+              </div>
+
               {/* Amount */}
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-1.5">
@@ -2293,6 +2385,49 @@ export default function DailyShiftClient({
             </div>
 
             <form onSubmit={e => handleQuickAddSale(e, false)} className="space-y-4">
+              {/* Sale Date Picker (Backdating Support) */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-1.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Calendar size={13} className="text-indigo-600" />
+                    <span>تاريخ البيع</span>
+                  </label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setSaleDate(todayKey)}
+                      className={cn(
+                        'px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors cursor-pointer border',
+                        saleDate === todayKey
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                      )}
+                    >
+                      اليوم
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSaleDate(addDays(todayKey, -1))}
+                      className={cn(
+                        'px-2 py-0.5 text-[10px] font-bold rounded-md transition-colors cursor-pointer border',
+                        saleDate === addDays(todayKey, -1)
+                          ? 'bg-amber-50 text-amber-700 border-amber-300'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                      )}
+                    >
+                      أمس
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="date"
+                  value={saleDate}
+                  onChange={e => setSaleDate(e.target.value)}
+                  className={`w-full ${inputClass} bg-white text-xs font-mono py-2`}
+                  dir="ltr"
+                />
+              </div>
+
               {/* Barcode Scanner Input */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">

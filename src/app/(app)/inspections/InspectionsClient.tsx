@@ -9,7 +9,16 @@ import {
   StickyNote, CheckCircle2, Wrench, Pencil,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
-import { formatDate, formatCurrency, parseAmount, parseArabicNumerals, cn } from '@/lib/utils'
+import {
+  formatDate,
+  formatCurrency,
+  parseAmount,
+  parseArabicNumerals,
+  cn,
+  toBaghdadDateTimeLocalString,
+  getBaghdadYesterdayDateTimeLocalString,
+  baghdadInputToISOString,
+} from '@/lib/utils'
 import { TECHNICIANS } from '@/lib/constants'
 import toast from 'react-hot-toast'
 import type { QuickInspection, InspectionType, ImageEntry } from '@/lib/types'
@@ -72,13 +81,13 @@ interface Props { initialRecords: QuickInspection[]; isAdmin: boolean }
 interface FormState {
   type: InspectionType; customer_name: string; phone: string
   subject: string; fault_codes: string; inspection_fee: string; notes: string
-  technician_name: string
+  technician_name: string; created_at: string
 }
 
 const EMPTY_FORM: FormState = {
   type: 'car', customer_name: '', phone: '', subject: '',
   fault_codes: '', inspection_fee: '', notes: '',
-  technician_name: '',
+  technician_name: '', created_at: '',
 }
 
 function TypeBadge({ type }: { type?: InspectionType }) {
@@ -175,7 +184,10 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
 
   function openNewModal() {
     setEditingRecord(null)
-    setForm(EMPTY_FORM)
+    setForm({
+      ...EMPTY_FORM,
+      created_at: toBaghdadDateTimeLocalString(),
+    })
     setImageFiles([])
     setExistingImages([])
     setShowModal(true)
@@ -192,6 +204,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
       inspection_fee: record.inspection_fee ? String(record.inspection_fee) : '',
       notes: record.notes || '',
       technician_name: record.technician_name || '',
+      created_at: toBaghdadDateTimeLocalString(record.created_at),
     })
     setExistingImages(normalizeImagePaths(record.image_paths))
     setImageFiles([])
@@ -227,6 +240,10 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
         ...uploadedImageUrls,
       ]
 
+      const chosenCreatedAt = form.created_at
+        ? baghdadInputToISOString(form.created_at)
+        : (editingRecord?.created_at || new Date().toISOString())
+
       const formData = {
         customer_name: form.customer_name,
         phone: form.phone,
@@ -254,6 +271,7 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
         notes: formData.notes?.trim() || null,
         image_paths: finalImagePaths,
         status: editingRecord ? (editingRecord.status || 'completed') : 'completed',
+        created_at: chosenCreatedAt,
       }
 
       let savedRecord: any = null
@@ -838,6 +856,43 @@ export default function InspectionsClient({ initialRecords, isAdmin }: Props) {
                   </button>
                 </div>
               </div>
+
+              {/* Inspection Date / Time (Backdating Support) */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Calendar size={14} className="text-teal-600" />
+                    <span>تاريخ ووقت الفحص (تسجيل بأثر رجعي)</span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, created_at: toBaghdadDateTimeLocalString() }))}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-teal-50 text-teal-700 border border-teal-200 hover:bg-teal-100 transition-colors cursor-pointer"
+                    >
+                      الآن (اليوم)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, created_at: getBaghdadYesterdayDateTimeLocalString() }))}
+                      className="px-2.5 py-1 text-[11px] font-bold rounded-lg bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
+                    >
+                      أمس
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="datetime-local"
+                  value={form.created_at}
+                  onChange={e => setForm(f => ({ ...f, created_at: e.target.value }))}
+                  className={cn(fieldCls, 'bg-white font-mono text-xs')}
+                  dir="ltr"
+                />
+                <p className="text-[10px] text-slate-400">
+                  افتراضياً الآن — يمكنك اختيار الأمس إذا فاتك تسجيل فحص تم بالأمس ليحتسب في شفت ذلك اليوم بدقة.
+                </p>
+              </div>
+
               {/* Customer & Technician */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>

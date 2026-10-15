@@ -2,7 +2,16 @@
 
 import { useState, useMemo } from 'react'
 import { TrendingUp, Plus, Trash2, Calendar, FileText } from 'lucide-react'
-import { formatCurrency, parseAmount, parseArabicNumerals } from '@/lib/utils'
+import {
+  formatCurrency,
+  parseAmount,
+  parseArabicNumerals,
+  toBaghdadDateString,
+  getBaghdadYesterdayKey,
+  getBaghdadTodayKey,
+  baghdadInputToISOString,
+  getBaghdadDateKey,
+} from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import toast from 'react-hot-toast'
 
@@ -27,6 +36,7 @@ export default function ExpensesClient({ initialExpenses }: { initialExpenses: E
   const [filter, setFilter] = useState<'all' | 'today' | 'month'>('month')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const [date, setDate] = useState(() => toBaghdadDateString())
   const [amount, setAmount] = useState('')
   const [description, setDescription] = useState('')
   const [category, setCategory] = useState('أخرى')
@@ -40,12 +50,16 @@ export default function ExpensesClient({ initialExpenses }: { initialExpenses: E
     }
 
     setIsSubmitting(true)
+    const isToday = date === getBaghdadTodayKey()
+    const createdAtIso = isToday ? new Date().toISOString() : baghdadInputToISOString(date)
+
     const { data, error } = await supabase
       .from('expenses')
       .insert({
         amount: parsedAmount,
         description: description.trim(),
         category,
+        created_at: createdAtIso,
       })
       .select()
       .single()
@@ -60,7 +74,7 @@ export default function ExpensesClient({ initialExpenses }: { initialExpenses: E
       setAmount('')
       setDescription('')
       setCategory('أخرى')
-      toast.success('تمت إضافة المصروف بنجاح')
+      toast.success('تمت إضافة المصروف بنجاح ✅')
     }
   }
 
@@ -77,14 +91,13 @@ export default function ExpensesClient({ initialExpenses }: { initialExpenses: E
   }
 
   const filteredExpenses = useMemo(() => {
-    const now = new Date()
-    const today = now.toISOString().split('T')[0]
-    const thisMonth = now.toISOString().slice(0, 7)
+    const today = getBaghdadTodayKey()
+    const thisMonth = today.slice(0, 7)
 
     return expenses.filter(expense => {
-      const dateStr = expense.created_at.split('T')[0]
-      if (filter === 'today') return dateStr === today
-      if (filter === 'month') return dateStr.startsWith(thisMonth)
+      const { dayKey, monthKey } = getBaghdadDateKey(expense.created_at)
+      if (filter === 'today') return dayKey === today
+      if (filter === 'month') return monthKey === thisMonth
       return true
     })
   }, [expenses, filter])
@@ -116,6 +129,38 @@ export default function ExpensesClient({ initialExpenses }: { initialExpenses: E
             إضافة مصروف جديد
           </h2>
           <form onSubmit={handleAddExpense} className="space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-sm font-semibold text-slate-700 flex items-center gap-1.5">
+                  <Calendar size={15} className="text-violet-500" />
+                  <span>تاريخ الصرفية</span>
+                </label>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setDate(getBaghdadTodayKey())}
+                    className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors cursor-pointer"
+                  >
+                    اليوم
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDate(getBaghdadYesterdayKey())}
+                    className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
+                  >
+                    أمس
+                  </button>
+                </div>
+              </div>
+              <input
+                type="date"
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className={`w-full font-mono ${inputClass}`}
+                dir="ltr"
+                required
+              />
+            </div>
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-2">المبلغ (د.ع)</label>
               <input

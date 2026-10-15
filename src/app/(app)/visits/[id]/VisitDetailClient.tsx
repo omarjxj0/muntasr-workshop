@@ -6,9 +6,18 @@ import { createClient } from '@/lib/supabase/client'
 import BarcodeScanner from '@/components/BarcodeScanner'
 import StatusBadge from '@/components/StatusBadge'
 import {
-  Car, Phone, Trash2, DollarSign, FileText, ArrowRight, Scan, Package, Lock, Wrench
+  Car, Phone, Trash2, DollarSign, FileText, ArrowRight, Scan, Package, Lock, Wrench, Calendar, X, CheckCircle2,
 } from 'lucide-react'
-import { formatDate, formatCurrency, VISIT_STATUS_LABELS, parseArabicNumerals, parseAmount } from '@/lib/utils'
+import {
+  formatDate,
+  formatCurrency,
+  VISIT_STATUS_LABELS,
+  parseArabicNumerals,
+  parseAmount,
+  toBaghdadDateTimeLocalString,
+  getBaghdadYesterdayDateTimeLocalString,
+  baghdadInputToISOString,
+} from '@/lib/utils'
 import { TECHNICIANS } from '@/lib/constants'
 import type { VisitStatus, UserRole } from '@/lib/types'
 import toast from 'react-hot-toast'
@@ -32,6 +41,11 @@ export default function VisitDetailClient({ visitId, role }: Props) {
   const [complaint, setComplaint] = useState('')
   const [laborCostInput, setLaborCostInput] = useState('')
   const [technicianName, setTechnicianName] = useState<string>('')
+  const [settlementDate, setSettlementDate] = useState(() => toBaghdadDateTimeLocalString())
+  const [showDateModal, setShowDateModal] = useState(false)
+  const [editEntryDate, setEditEntryDate] = useState('')
+  const [editDeliveredDate, setEditDeliveredDate] = useState('')
+  const [savingDates, setSavingDates] = useState(false)
   const [saving, setSaving] = useState(false)
   const router = useRouter()
   const supabase = createClient()
@@ -44,6 +58,11 @@ export default function VisitDetailClient({ visitId, role }: Props) {
       setTechnicianName(data.technician_name ?? '')
       const numericLabor = Number(data.labor_cost) || 0
       setLaborCostInput(numericLabor > 0 ? Math.round(numericLabor).toString() : '')
+      if (data.delivered_at) {
+        setSettlementDate(toBaghdadDateTimeLocalString(data.delivered_at))
+      } else if (data.completed_at) {
+        setSettlementDate(toBaghdadDateTimeLocalString(data.completed_at))
+      }
     }
   }, [visitId, supabase])
 
@@ -74,26 +93,28 @@ export default function VisitDetailClient({ visitId, role }: Props) {
   }, [loadVisit, loadParts, loadVehicleAndCustomer])
 
   // 24-Hour Visit Auto-Lock:
-  // If status is 'Delivered' and >= 24 hours have passed since delivery, lock all edits
+  // If status is 'Delivered' and >= 24 hours have passed since delivery, lock technician edits (admin can still override)
   const isDelivered = visit?.status === 'Delivered'
   const deliveryTimestamp = new Date(visit?.delivered_at || visit?.entry_date || 0).getTime()
   const hoursSinceDelivery = (Date.now() - deliveryTimestamp) / (1000 * 60 * 60)
-  const isLocked = isDelivered && hoursSinceDelivery >= 24
+  const isLocked = isDelivered && hoursSinceDelivery >= 24 && role !== 'admin'
 
   const handleStatusChange = async (status: VisitStatus) => {
     if (isLocked) {
       toast.error('الزيارة مقفلة ومؤرشفة — لا يمكن تغيير حالتها')
       return
     }
-    const now = new Date().toISOString()
+    const chosenDate = settlementDate
+      ? baghdadInputToISOString(settlementDate)
+      : new Date().toISOString()
     const updatePayload: any = { status }
 
     if (status === 'Delivered') {
-      updatePayload.delivered_at = now
+      updatePayload.delivered_at = chosenDate
     } else if (status === 'Completed') {
-      updatePayload.completed_at = now
+      updatePayload.completed_at = chosenDate
       if (!visit?.delivered_at) {
-        updatePayload.delivered_at = now
+        updatePayload.delivered_at = chosenDate
       }
     } else {
       updatePayload.delivered_at = null
@@ -157,8 +178,11 @@ export default function VisitDetailClient({ visitId, role }: Props) {
     
     if (grandTotal <= 0) { toast.error('يرجى تحديد أتعاب العمل والبرمجة أولاً'); return }
 
+    const chosenDate = settlementDate
+      ? baghdadInputToISOString(settlementDate)
+      : new Date().toISOString()
+
     const desc = `أجور صيانة وبرمجة - ${customer?.name ?? ''} - ${vehicle?.make_and_model ?? ''}`
-    const now = new Date().toISOString()
 
     const { error } = await supabase.from('transactions').insert({
       type: 'Income',
@@ -166,19 +190,55 @@ export default function VisitDetailClient({ visitId, role }: Props) {
       reference_type: 'Visit_Payment',
       reference_id: visitId,
       description: desc,
-      date: now,
+      date: chosenDate,
     } as any)
     if (error) { toast.error('فشل في تسجيل الدفعة'); return }
 
     await supabase.from('visits').update({
       status: 'Delivered',
       labor_cost: currentLabor,
-      delivered_at: now,
+      delivered_at: chosenDate,
       technician_name: technicianName || visit.technician_name || null,
     } as any).eq('id', visitId)
 
     toast.success('تم تسوية الحساب وتسليم السيارة بنجاح 🎉')
     loadVisit()
+  }
+
+  const handleSaveDates = async () => {
+    if (!editEntryDate) {
+      toast.error('يرجى تحديد تاريخ الدخول')
+      return
+    }
+    setSavingDates(true)
+    try {
+      const entryIso = baghdadInputToISOString(editEntryDate)
+      const delivIso = editDeliveredDate ? baghdadInputToISOString(editDeliveredDate) : null
+
+      const updatePayload: any = { entry_date: entryIso }
+      if (editDeliveredDate || visit.status === 'Delivered') {
+        updatePayload.delivered_at = delivIso
+      }
+
+      const { error } = await supabase.from('visits').update(updatePayload).eq('id', visitId)
+      if (error) throw error
+
+      if (delivIso) {
+        await supabase
+          .from('transactions')
+          .update({ date: delivIso })
+          .eq('reference_id', visitId)
+          .eq('reference_type', 'Visit_Payment')
+      }
+
+      toast.success('تم تحديث تواريخ الزيارة بنجاح ✅')
+      setShowDateModal(false)
+      loadVisit()
+    } catch (err: any) {
+      toast.error('فشل في تعديل التواريخ: ' + (err.message || 'خطأ غير متوقع'))
+    } finally {
+      setSavingDates(false)
+    }
   }
 
   const handleSendWhatsApp = () => {
@@ -312,6 +372,21 @@ export default function VisitDetailClient({ visitId, role }: Props) {
                     <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
                       تاريخ التسليم: {formatDate(visit.delivered_at)}
                     </span>
+                  )}
+                  {role === 'admin' && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditEntryDate(toBaghdadDateTimeLocalString(visit.entry_date))
+                        setEditDeliveredDate(visit.delivered_at ? toBaghdadDateTimeLocalString(visit.delivered_at) : '')
+                        setShowDateModal(true)
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200 hover:bg-violet-100 transition-colors cursor-pointer"
+                      title="تعديل تاريخ الدخول أو التسليم للسيارة بأثر رجعي"
+                    >
+                      <Calendar size={11} />
+                      <span>تعديل التواريخ</span>
+                    </button>
                   )}
                   {technicianName ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
@@ -520,21 +595,179 @@ export default function VisitDetailClient({ visitId, role }: Props) {
               </div>
             </div>
             {role === 'admin' && !isLocked && visit.status !== 'Delivered' && (
-              <button
-                onClick={handleCollectPayment}
-                className="w-full py-3 rounded-2xl font-bold text-white transition-all cursor-pointer"
-                style={{
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  boxShadow: '0 4px 15px rgba(16,185,129,0.3)',
-                }}
-              >
-                💰 تحصيل الإيراد وتسليم السيارة
-              </button>
+              <div className="space-y-3 pt-2">
+                {/* Settlement Date Picker (Backdating) */}
+                <div className="bg-slate-50 p-3 rounded-xl border border-slate-200/80 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                      <Calendar size={12} className="text-emerald-600" />
+                      <span>تاريخ التسليم والمحاسبة</span>
+                    </label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setSettlementDate(toBaghdadDateTimeLocalString())}
+                        className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors cursor-pointer"
+                      >
+                        الآن
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSettlementDate(getBaghdadYesterdayDateTimeLocalString())}
+                        className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
+                      >
+                        أمس
+                      </button>
+                    </div>
+                  </div>
+                  <input
+                    type="datetime-local"
+                    value={settlementDate}
+                    onChange={e => setSettlementDate(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-800 text-xs font-mono focus:outline-none focus:border-emerald-400"
+                    dir="ltr"
+                  />
+                  <p className="text-[10px] text-slate-400">
+                    افتراضياً الآن — يمكنك اختيار الأمس إذا كانت السيارة سُلمت بالأمس لتسجيل دخلها في شفت أمس.
+                  </p>
+                </div>
+
+                <button
+                  onClick={handleCollectPayment}
+                  className="w-full py-3 rounded-2xl font-bold text-white transition-all cursor-pointer"
+                  style={{
+                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                    boxShadow: '0 4px 15px rgba(16,185,129,0.3)',
+                  }}
+                >
+                  💰 تحصيل الإيراد وتسليم السيارة
+                </button>
+              </div>
             )}
           </div>
         </div>
       </div>
       
+      {/* Date Edit Modal (Admin backdating override) */}
+      {showDateModal && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs"
+          onClick={() => !savingDates && setShowDateModal(false)}
+        >
+          <div
+            className="soft-card bg-white p-6 max-w-md w-full space-y-4 border-2 border-violet-100 shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-violet-50 border border-violet-200 flex items-center justify-center text-violet-600">
+                  <Calendar size={18} />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-800">تعديل تواريخ الزيارة بأثر رجعي</h3>
+                  <p className="text-xs text-slate-400">تعديل تاريخ دخول أو تسليم السيارة في السجلات</p>
+                </div>
+              </div>
+              <button
+                onClick={() => !savingDates && setShowDateModal(false)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">تاريخ ووقت الدخول</label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditEntryDate(toBaghdadDateTimeLocalString())}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+                    >
+                      اليوم
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditEntryDate(getBaghdadYesterdayDateTimeLocalString())}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
+                    >
+                      أمس
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="datetime-local"
+                  value={editEntryDate}
+                  onChange={e => setEditEntryDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-xs font-mono focus:outline-none focus:border-violet-400"
+                  dir="ltr"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">تاريخ ووقت التسليم (اختياري)</label>
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setEditDeliveredDate(toBaghdadDateTimeLocalString())}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-slate-100 text-slate-600 hover:bg-slate-200 transition-colors cursor-pointer"
+                    >
+                      اليوم
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditDeliveredDate(getBaghdadYesterdayDateTimeLocalString())}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition-colors cursor-pointer"
+                    >
+                      أمس
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditDeliveredDate('')}
+                      className="px-2 py-0.5 text-[10px] font-bold rounded-md bg-rose-50 text-rose-600 border border-rose-200 hover:bg-rose-100 transition-colors cursor-pointer"
+                    >
+                      مسح
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="datetime-local"
+                  value={editDeliveredDate}
+                  onChange={e => setEditDeliveredDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 text-xs font-mono focus:outline-none focus:border-violet-400"
+                  dir="ltr"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  تعديل تاريخ التسليم سيحدث تاريخ تقرير الشفت اليومي وسجل المدفوعات فوراً.
+                </p>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowDateModal(false)}
+                disabled={savingDates}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDates}
+                disabled={savingDates}
+                className="px-5 py-2 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-xs font-bold transition-all shadow-md shadow-violet-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {savingDates ? 'جاري الحفظ...' : 'حفظ التواريخ'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Hidden print component */}
       <ThermalReceipt visit={visit} vehicle={vehicle} customer={customer} parts={parts} />
     </div>

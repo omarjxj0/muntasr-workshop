@@ -151,3 +151,85 @@ export function formatFullBaghdadDate(dateStr: string | Date = new Date()): stri
   }
 }
 
+/**
+ * Returns a string formatted as YYYY-MM-DDTHH:mm suitable for <input type="datetime-local">
+ * respecting the Baghdad timezone (Asia/Baghdad) or provided date.
+ */
+export function toBaghdadDateTimeLocalString(date: Date | string = new Date()): string {
+  try {
+    const d = typeof date === 'string' ? new Date(date) : date
+    if (isNaN(d.getTime())) return ''
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Baghdad',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).formatToParts(d)
+
+    const find = (type: string) => parts.find(p => p.type === type)?.value || '00'
+    const year = find('year')
+    const month = find('month')
+    const day = find('day')
+    const hour = find('hour')
+    const minute = find('minute')
+    return `${year}-${month}-${day}T${hour}:${minute}`
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Returns a string formatted as YYYY-MM-DD suitable for <input type="date">
+ * in Asia/Baghdad timezone.
+ */
+export function toBaghdadDateString(date: Date | string = new Date()): string {
+  try {
+    const d = typeof date === 'string' ? new Date(date) : date
+    if (isNaN(d.getTime())) return ''
+    const { dayKey } = getBaghdadDateKey(d)
+    return dayKey
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * Returns yesterday's YYYY-MM-DD in Asia/Baghdad timezone.
+ */
+export function getBaghdadYesterdayKey(): string {
+  const [y, m, d] = getBaghdadTodayKey().split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d - 1, 12, 0, 0))
+  return getBaghdadDateKey(dt).dayKey
+}
+
+/**
+ * Returns yesterday's YYYY-MM-DDTHH:mm in Asia/Baghdad timezone.
+ */
+export function getBaghdadYesterdayDateTimeLocalString(): string {
+  const now = new Date()
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  return toBaghdadDateTimeLocalString(yesterday)
+}
+
+/**
+ * Converts a datetime-local or date string (assumed to be in Baghdad time if no offset)
+ * into an accurate UTC ISO 8601 string (+03:00 for Baghdad).
+ */
+export function baghdadInputToISOString(inputVal: string): string {
+  if (!inputVal) return new Date().toISOString()
+  if (inputVal.includes('Z') || /[+-]\d{2}:\d{2}$/.test(inputVal)) {
+    return new Date(inputVal).toISOString()
+  }
+  if (inputVal.includes('T')) {
+    const withSeconds = inputVal.split(':').length === 2 ? `${inputVal}:00` : inputVal
+    return new Date(`${withSeconds}+03:00`).toISOString()
+  }
+  const nowBaghdad = toBaghdadDateTimeLocalString(new Date())
+  const timePart = nowBaghdad.split('T')[1] || '12:00'
+  return new Date(`${inputVal}T${timePart}:00+03:00`).toISOString()
+}
+
+
