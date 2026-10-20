@@ -9,7 +9,10 @@ CREATE TABLE IF NOT EXISTS public.expenses (
 -- Enable RLS
 ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 
--- Allow full CRUD for authenticated users
+GRANT ALL ON TABLE public.expenses TO authenticated, anon;
+
+-- Allow full CRUD for authenticated and anon users
 DROP POLICY IF EXISTS "Allow full CRUD for authenticated users on expenses" ON public.expenses;
-CREATE POLICY "Allow full CRUD for authenticated users on expenses" 
-ON public.expenses FOR ALL TO authenticated USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS "Allow full CRUD for authenticated and anon users on expenses" ON public.expenses;
+CREATE POLICY "Allow full CRUD for authenticated and anon users on expenses" 
+ON public.expenses FOR ALL TO public USING (true) WITH CHECK (true);

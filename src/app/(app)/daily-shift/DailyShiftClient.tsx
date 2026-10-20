@@ -7,7 +7,7 @@ import {
   CheckCircle2, Clock, Filter, Printer, ExternalLink, RefreshCw,
   TrendingUp, TrendingDown, Activity, User, Phone, AlertCircle, ChevronLeft, ChevronRight,
   Wallet, Receipt, Plus, Trash2, ArrowDownRight, ArrowUpRight, Coins, Sparkles,
-  ShoppingBag, Scan, Tag
+  ShoppingBag, Scan, Tag, Pencil, AlertTriangle
 } from 'lucide-react'
 import {
   formatCurrency,
@@ -229,6 +229,20 @@ export default function DailyShiftClient({
   const [expenseWorker, setExpenseWorker] = useState('عام / الورشة')
   const [expenseNote, setExpenseNote] = useState('')
   const [isSubmittingExpense, setIsSubmittingExpense] = useState(false)
+
+  // Edit Expense Modal State
+  const [editingExpense, setEditingExpense] = useState<DailyExpenseItem | null>(null)
+  const [editExpenseAmount, setEditExpenseAmount] = useState('')
+  const [editExpenseCategory, setEditExpenseCategory] = useState('ضيافة ونثريات')
+  const [editExpenseDescription, setEditExpenseDescription] = useState('')
+  const [editExpenseDate, setEditExpenseDate] = useState('')
+  const [editExpenseWorker, setEditExpenseWorker] = useState('عام / الورشة')
+  const [editExpenseNote, setEditExpenseNote] = useState('')
+  const [isSavingEditExpense, setIsSavingEditExpense] = useState(false)
+
+  // Delete Expense Confirmation Modal State
+  const [deletingExpense, setDeletingExpense] = useState<DailyExpenseItem | null>(null)
+  const [isDeletingExpense, setIsDeletingExpense] = useState(false)
 
   // Barcode Lookup for Fast Direct Sale
   const lookupSaleBarcode = async (code: string) => {
@@ -667,21 +681,163 @@ export default function DailyShiftClient({
     }
   }
 
-  // Handle Delete Expense
-  const handleDeleteExpense = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذه الصرفية؟ سيتم إرجاع المبلغ لصافي ربح اليوم فوراً.')) return
+  // Open Edit Expense Modal
+  const handleOpenEditExpense = (item: DailyExpenseItem) => {
+    setEditingExpense(item)
+    setEditExpenseAmount(String(item.amount))
+    setEditExpenseCategory(item.category)
+
+    let desc = item.description
+    let worker = item.recipientName || 'عام / الورشة'
+    let note = ''
+
+    const recipientMatch = desc.match(/\(المستلم:\s*([^)]+)\)/)
+    if (recipientMatch) {
+      worker = recipientMatch[1].trim()
+      desc = desc.replace(/\(المستلم:\s*[^)]+\)/, '').trim()
+    }
+    const noteMatch = desc.match(/\[([^\]]+)\]/)
+    if (noteMatch) {
+      note = noteMatch[1].trim()
+      desc = desc.replace(/\[[^\]]+\]/, '').trim()
+    }
+
+    setEditExpenseDescription(desc)
+    setEditExpenseWorker(worker)
+    setEditExpenseNote(note)
+
+    const { dayKey } = getBaghdadDateKey(item.created_at)
+    setEditExpenseDate(dayKey)
+  }
+
+  // Handle Save Edit Expense (Supabase Update & Local State Refresh)
+  const handleSaveEditExpense = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!editingExpense) return
+    const parsed = parseAmount(editExpenseAmount)
+    if (parsed <= 0) {
+      toast.error('يرجى إدخال مبلغ صحيح للصرفية')
+      return
+    }
+    if (!editExpenseDescription.trim()) {
+      toast.error('يرجى إدخال وصف أو سبب المصروف')
+      return
+    }
+
+    setIsSavingEditExpense(true)
 
     try {
-      const { error } = await supabase.from('expenses').delete().eq('id', id)
-      if (error) {
-        toast.error('حدث خطأ أثناء حذف الصرفية')
+      const isToday = editExpenseDate === todayKey
+      const createdAtIso = isToday ? new Date().toISOString() : baghdadInputToISOString(editExpenseDate)
+
+      const recipientTag = editExpenseWorker && editExpenseWorker !== 'عام / الورشة' ? ` (المستلم: ${editExpenseWorker})` : ''
+      const extraNote = editExpenseNote.trim() ? ` [${editExpenseNote.trim()}]` : ''
+      const fullDescription = `${editExpenseDescription.trim()}${recipientTag}${extraNote}`
+
+      if (editingExpense.isWage) {
+        // Daily wage entry from daily_wages table
+        const { error } = await supabase
+          .from('daily_wages')
+          .update({
+            amount: parsed,
+            date: editExpenseDate,
+          })
+          .eq('id', editingExpense.id)
+
+        if (error) {
+          console.error('Wage update error:', error)
+          toast.error('حدث خطأ أثناء تعديل الأجر اليومي')
+        } else {
+          setAllWagesState(prev =>
+            prev.map(w =>
+              w.id === editingExpense.id
+                ? {
+                    ...w,
+                    amount: parsed,
+                    created_at: editExpenseDate,
+                  }
+                : w
+            )
+          )
+          toast.success('تم تعديل الأجر اليومي وتحديث صافي الشفت بنجاح ✅')
+          setEditingExpense(null)
+        }
       } else {
-        setAllExpensesState(prev => prev.filter(e => e.id !== id))
-        toast.success('تم حذف الصرفية وتحديث صافي الربح بنجاح ✅')
+        // Expense entry from expenses table
+        const { error } = await supabase
+          .from('expenses')
+          .update({
+            amount: parsed,
+            category: editExpenseCategory,
+            description: fullDescription,
+            created_at: createdAtIso,
+          })
+          .eq('id', editingExpense.id)
+
+        if (error) {
+          console.error('Expense update error:', error)
+          toast.error('حدث خطأ أثناء تعديل الصرفية')
+        } else {
+          setAllExpensesState(prev =>
+            prev.map(item =>
+              item.id === editingExpense.id
+                ? {
+                    ...item,
+                    amount: parsed,
+                    category: editExpenseCategory,
+                    description: fullDescription,
+                    created_at: createdAtIso,
+                    recipientName: editExpenseWorker !== 'عام / الورشة' ? editExpenseWorker : null,
+                  }
+                : item
+            )
+          )
+          const isBackdated = !isSameBaghdadDay(createdAtIso, selectedDate)
+          const dayNotice = isBackdated ? `بتاريخ (${editExpenseDate})` : 'لشفت اليوم'
+          toast.success(`تم تعديل الصرفية بقيمة ${formatCurrency(parsed)} ${dayNotice} وتحديث صافي الشفت فوراً ✅`)
+          setEditingExpense(null)
+        }
       }
     } catch (err) {
       console.error(err)
-      toast.error('تعذر حذف الصرفية')
+      toast.error('حدث خطأ غير متوقع أثناء حفظ التعديل')
+    } finally {
+      setIsSavingEditExpense(false)
+    }
+  }
+
+  // Handle Execute Delete Expense
+  const handleExecuteDeleteExpense = async () => {
+    if (!deletingExpense) return
+    setIsDeletingExpense(true)
+
+    try {
+      if (deletingExpense.isWage) {
+        const { error } = await supabase.from('daily_wages').delete().eq('id', deletingExpense.id)
+        if (error) {
+          console.error(error)
+          toast.error('حدث خطأ أثناء حذف الأجر اليومي')
+        } else {
+          setAllWagesState(prev => prev.filter(w => w.id !== deletingExpense.id))
+          toast.success('تم حذف الأجر اليومي وتحديث صافي الربح فوراً ✅')
+          setDeletingExpense(null)
+        }
+      } else {
+        const { error } = await supabase.from('expenses').delete().eq('id', deletingExpense.id)
+        if (error) {
+          console.error(error)
+          toast.error('حدث خطأ أثناء حذف الصرفية')
+        } else {
+          setAllExpensesState(prev => prev.filter(e => e.id !== deletingExpense.id))
+          toast.success('تم حذف المصروف وتحديث صافي أرباح اليوم فوراً ✅')
+          setDeletingExpense(null)
+        }
+      }
+    } catch (err) {
+      console.error(err)
+      toast.error('تعذر حذف المصروف')
+    } finally {
+      setIsDeletingExpense(false)
     }
   }
 
@@ -1756,7 +1912,7 @@ export default function DailyShiftClient({
                       <th className="py-3 px-3">المستلم / الفني</th>
                       <th className="py-3 px-3 font-mono">المبلغ (د.ع)</th>
                       <th className="py-3 px-3">الوقت</th>
-                      <th className="py-3 px-3 text-center w-16">إجراء</th>
+                      <th className="py-3 px-3 text-center w-36">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
@@ -1792,18 +1948,25 @@ export default function DailyShiftClient({
                         <td className="py-3.5 px-3 text-xs text-slate-400 whitespace-nowrap">
                           {formatTimeBaghdad(exp.created_at)}
                         </td>
-                        <td className="py-3.5 px-3 text-center">
-                          {!exp.isWage ? (
+                        <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
                             <button
-                              onClick={() => handleDeleteExpense(exp.id)}
-                              className="p-1.5 text-slate-300 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                              title="حذف المصروف"
+                              onClick={() => handleOpenEditExpense(exp)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-200 cursor-pointer shadow-xs"
+                              title="تعديل الصرفية"
                             >
-                              <Trash2 size={15} />
+                              <Pencil size={11} />
+                              <span>تعديل ✏️</span>
                             </button>
-                          ) : (
-                            <span className="text-[10px] text-slate-400" title="يُدار من شاشة الرواتب">أجر</span>
-                          )}
+                            <button
+                              onClick={() => setDeletingExpense(exp)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 rounded-lg transition-colors border border-rose-200 cursor-pointer shadow-xs"
+                              title="حذف الصرفية"
+                            >
+                              <Trash2 size={11} />
+                              <span>حذف 🗑️</span>
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -2247,6 +2410,298 @@ export default function DailyShiftClient({
                     <>
                       <Plus size={14} />
                       حفظ الصرفية وتحديث الشفت
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE EXPENSE CONFIRMATION MODAL */}
+      {deletingExpense && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs"
+          onClick={() => !isDeletingExpense && setDeletingExpense(null)}
+        >
+          <div
+            className="soft-card bg-white p-6 max-w-md w-full space-y-4 border-2 border-rose-100 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 text-rose-600 flex items-center justify-center shrink-0">
+                <AlertTriangle size={24} />
+              </div>
+              <div className="space-y-1 flex-1">
+                <h3 className="text-lg font-bold text-slate-800">
+                  {deletingExpense.isWage ? 'حذف الأجر اليومي؟' : 'حذف هذا المصروف؟'}
+                </h3>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  هل أنت متأكد من حذف هذا المصروف؟ سيتم تعديل صافي أرباح اليوم فوراً وتحديث الحسابات.
+                </p>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 space-y-2 text-xs">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">المبلغ المسترجع للربح:</span>
+                <span className="font-mono font-bold text-sm text-emerald-600">+ {formatCurrency(deletingExpense.amount)}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">التصنيف:</span>
+                <span className="font-semibold text-slate-700">{deletingExpense.category}</span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">الوصف:</span>
+                <span className="font-semibold text-slate-700 truncate max-w-[200px]">{deletingExpense.description}</span>
+              </div>
+              {deletingExpense.recipientName && (
+                <div className="flex justify-between items-center">
+                  <span className="text-slate-500">المستلم / الفني:</span>
+                  <span className="font-semibold text-indigo-700">🔧 {deletingExpense.recipientName}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center">
+                <span className="text-slate-500">التاريخ:</span>
+                <span className="font-mono text-slate-600">{new Date(deletingExpense.created_at).toLocaleDateString('ar')}</span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setDeletingExpense(null)}
+                disabled={isDeletingExpense}
+                className="px-4 py-2.5 text-xs font-bold rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
+              >
+                إلغاء الأمر
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteDeleteExpense}
+                disabled={isDeletingExpense}
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-bold rounded-xl text-white bg-rose-600 hover:bg-rose-700 shadow-md shadow-rose-600/30 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Trash2 size={14} />
+                <span>{isDeletingExpense ? 'جاري الحذف...' : 'نعم، حذف المصروف 🗑️'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT EXPENSE MODAL */}
+      {editingExpense && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-xs"
+          onClick={() => !isSavingEditExpense && setEditingExpense(null)}
+        >
+          <div
+            className="soft-card bg-white p-6 max-w-lg w-full space-y-4 max-h-[90vh] overflow-y-auto border-2 border-indigo-100 shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600 shadow-sm">
+                  <Pencil size={20} />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-lg text-slate-800">
+                    {editingExpense.isWage ? 'تعديل الأجر اليومي ✏️' : 'تعديل بيانات المصروف ✏️'}
+                  </h3>
+                  <p className="text-xs text-slate-500">تصحيح المبلغ، التصنيف، الوصف، أو تغيير يوم الصرفية</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingExpense(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 cursor-pointer transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditExpense} className="space-y-4">
+              {/* Date Selection */}
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200/80 space-y-2">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                    <Calendar size={14} className="text-indigo-600" />
+                    <span>تاريخ الصرفية (اليوم المعني) <span className="text-rose-500">*</span></span>
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setEditExpenseDate(todayKey)}
+                      className={cn(
+                        'px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer border',
+                        editExpenseDate === todayKey
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                      )}
+                    >
+                      اليوم
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditExpenseDate(addDays(todayKey, -1))}
+                      className={cn(
+                        'px-2.5 py-1 text-xs font-bold rounded-lg transition-colors cursor-pointer border',
+                        editExpenseDate === addDays(todayKey, -1)
+                          ? 'bg-amber-50 text-amber-700 border-amber-300'
+                          : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-100'
+                      )}
+                    >
+                      أمس
+                    </button>
+                  </div>
+                </div>
+                <input
+                  type="date"
+                  value={editExpenseDate}
+                  onChange={e => setEditExpenseDate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-xl font-mono text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-slate-800"
+                  dir="ltr"
+                  required
+                />
+                <p className="text-[10px] text-slate-500">
+                  💡 في حال تم تسجيل الصرفية بالخطأ في يوم غير صحيح، فإن تعديل التاريخ سينقلها لشفت ذلك اليوم ويعدل صافي الأرباح فوراً.
+                </p>
+              </div>
+
+              {/* Amount */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                  <span>المبلغ (د.ع) <span className="text-rose-500">*</span></span>
+                  {editExpenseAmount && parseAmount(editExpenseAmount) > 0 && (
+                    <span className="text-indigo-600 font-mono text-xs">
+                      = {formatCurrency(parseAmount(editExpenseAmount))}
+                    </span>
+                  )}
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={editExpenseAmount}
+                    onChange={e => setEditExpenseAmount(parseArabicNumerals(e.target.value))}
+                    placeholder="مثال: 25000"
+                    className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl font-mono text-base font-bold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all text-left"
+                    dir="ltr"
+                    required
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400 pointer-events-none">
+                    د.ع
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {[5000, 10000, 25000, 50000].map(val => (
+                    <button
+                      key={val}
+                      type="button"
+                      onClick={() => {
+                        const cur = parseAmount(editExpenseAmount)
+                        setEditExpenseAmount(String(cur + val))
+                      }}
+                      className="px-2 py-0.5 text-[11px] font-bold rounded-lg bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors cursor-pointer"
+                    >
+                      +{formatCurrency(val)}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setEditExpenseAmount('')}
+                    className="px-2 py-0.5 text-[11px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
+                  >
+                    تصفير
+                  </button>
+                </div>
+              </div>
+
+              {!editingExpense.isWage && (
+                <>
+                  {/* Category */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">التصنيف</label>
+                    <select
+                      value={editExpenseCategory}
+                      onChange={e => setEditExpenseCategory(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+                    >
+                      {EXPENSE_CATEGORIES.map(cat => (
+                        <option key={cat} value={cat}>{cat}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Worker / Recipient */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">المستلم أو المستفيد (اختياري)</label>
+                    <select
+                      value={editExpenseWorker}
+                      onChange={e => setEditExpenseWorker(e.target.value)}
+                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all cursor-pointer"
+                    >
+                      <option value="عام / الورشة">عام / الورشة</option>
+                      {TECHNICIANS.map(tech => (
+                        <option key={tech} value={tech}>🔧 فني: {tech}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
+              )}
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-700">الوصف أو البيان <span className="text-rose-500">*</span></label>
+                <input
+                  type="text"
+                  value={editExpenseDescription}
+                  onChange={e => setEditExpenseDescription(e.target.value)}
+                  placeholder="مثال: شراء بنزين للمولد، ضيافة شاي..."
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  required
+                />
+              </div>
+
+              {!editingExpense.isWage && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-700">ملاحظات إضافية (اختياري)</label>
+                  <input
+                    type="text"
+                    value={editExpenseNote}
+                    onChange={e => setEditExpenseNote(e.target.value)}
+                    placeholder="رقم وصل، اسم محل، تفاصيل إضافية..."
+                    className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all"
+                  />
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingExpense(null)}
+                  disabled={isSavingEditExpense}
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors cursor-pointer"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingEditExpense}
+                  className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold transition-all shadow-md shadow-indigo-600/30 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                >
+                  {isSavingEditExpense ? (
+                    <>
+                      <RefreshCw size={14} className="animate-spin" />
+                      جاري الحفظ...
+                    </>
+                  ) : (
+                    <>
+                      <Pencil size={14} />
+                      حفظ التعديلات وتحديث الشفت 💾
                     </>
                   )}
                 </button>
