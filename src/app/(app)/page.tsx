@@ -73,15 +73,16 @@ export default async function DashboardPage() {
   const todayKey = `${nowBaghdadParts[0]}-${nowBaghdadParts[1]}-${nowBaghdadParts[2]}`
   const currentMonthKey = `${nowBaghdadParts[0]}-${nowBaghdadParts[1]}`
 
-  // 1. Completed Visits Revenue settled on delivery date (delivered_at || completed_at || entry_date)
+  // 1. Delivered Visits Revenue settled on delivery date (delivered_at || entry_date)
+  // Visits with status 'Completed' (ديون) are debts and do NOT count as collected cash until status is 'Delivered'
   let todayVisitsRev = 0
   let monthVisitsRev = 0
   let allVisitsRev = 0
 
   for (const v of visitsData || []) {
-    if (v.status === 'Completed' || v.status === 'Delivered') {
+    if (v.status === 'Delivered') {
       const rev = (Number(v.labor_cost) || 0) + (Number(v.total_amount) || 0)
-      const settlementDate = (v as any).delivered_at || (v as any).completed_at || v.entry_date
+      const settlementDate = (v as any).delivered_at || v.entry_date
       const { dayKey, monthKey } = getBaghdadDateKey(settlementDate)
       if (dayKey === todayKey) todayVisitsRev += rev
       if (monthKey === currentMonthKey) monthVisitsRev += rev
@@ -219,7 +220,7 @@ export default async function DashboardPage() {
             المؤشرات المالية (الصافي)
           </h2>
           <span className="text-xs text-slate-400 font-medium">
-            أجور الزيارات المكتملة + رسوم الفحوصات - المصروفات
+            أجور الزيارات المسلّمة والمقبوضة + رسوم الفحوصات - المصروفات
           </span>
         </div>
 

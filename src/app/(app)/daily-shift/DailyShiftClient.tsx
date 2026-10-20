@@ -170,9 +170,16 @@ export default function DailyShiftClient({
   // ── Client-side date filtering (drives all metrics) ──────────
   const initialVisits = useMemo(() => {
     return allVisits.filter(v => {
-      const isDeliveredOrCompleted = v.status === 'Completed' || v.status === 'Delivered'
-      const settlementDate = v.delivered_at || v.completed_at || v.entry_date
-      if (isDeliveredOrCompleted && isSameBaghdadDay(settlementDate, selectedDate)) return true
+      // Delivered visits appear on their delivery day (when cash was collected)
+      if (v.status === 'Delivered') {
+        const settlementDate = v.delivered_at || v.entry_date
+        return isSameBaghdadDay(settlementDate, selectedDate)
+      }
+      // Debt visits (Completed) appear on completion date or entry date
+      if (v.status === 'Completed') {
+        const debtDate = v.completed_at || v.entry_date
+        return isSameBaghdadDay(debtDate, selectedDate)
+      }
       const isActive = v.status === 'Pending' || v.status === 'In Progress'
       if (isActive && isSameBaghdadDay(v.entry_date, selectedDate)) return true
       return false
@@ -377,9 +384,10 @@ export default function DailyShiftClient({
 
     // 1. Visits
     for (const v of initialVisits) {
-      const isDeliveredOrCompleted = v.status === 'Completed' || v.status === 'Delivered'
-      // Overnight cars staying in the workshop contribute 0 cash today!
-      const grandTotal = isDeliveredOrCompleted
+      const isDelivered = v.status === 'Delivered'
+      const isDebt = v.status === 'Completed'
+      // Only delivered and settled visits contribute collected cash today! Debts and overnight cars contribute 0 cash today!
+      const grandTotal = isDelivered
         ? (Number(v.labor_cost) || 0) + (Number(v.total_amount) || 0)
         : 0
 
@@ -390,9 +398,13 @@ export default function DailyShiftClient({
       let statusText = VISIT_STATUS_LABELS[v.status] || v.status
       let kindLabel = 'زيارة صيانة'
 
-      if (isDeliveredOrCompleted) {
+      if (isDelivered) {
         statusVariant = 'success'
-        kindLabel = v.status === 'Delivered' ? 'زيارة مسلّمة' : 'زيارة مكتملة'
+        kindLabel = 'زيارة مسلّمة ومقبوضة'
+      } else if (isDebt) {
+        statusVariant = 'warning'
+        statusText = 'ديون (غير مسدد)'
+        kindLabel = 'زيارة صيانة (دين)'
       } else if (v.status === 'In Progress') {
         statusVariant = 'warning'
         statusText = 'قيد العمل (بايتة)'
@@ -403,7 +415,7 @@ export default function DailyShiftClient({
         kindLabel = 'سيارة بايتة'
       }
 
-      const timestamp = (isDeliveredOrCompleted ? (v.delivered_at || v.completed_at) : null) || v.entry_date
+      const timestamp = (isDelivered ? v.delivered_at : isDebt ? v.completed_at : null) || v.entry_date
 
       list.push({
         id: v.id,
@@ -475,7 +487,20 @@ export default function DailyShiftClient({
   const totalInspectionsCount = initialInspections.length
 
   const deliveredVisitsCount = useMemo(() => {
-    return initialVisits.filter(v => v.status === 'Completed' || v.status === 'Delivered').length
+    return initialVisits.filter(v => v.status === 'Delivered').length
+  }, [initialVisits])
+
+  const debtVisitsCount = useMemo(() => {
+    return initialVisits.filter(v => v.status === 'Completed').length
+  }, [initialVisits])
+
+  const debtVisitsTotalToday = useMemo(() => {
+    return initialVisits.reduce((sum, v) => {
+      if (v.status === 'Completed') {
+        return sum + ((Number(v.labor_cost) || 0) + (Number(v.total_amount) || 0))
+      }
+      return sum
+    }, 0)
   }, [initialVisits])
 
   const overnightVisitsCount = useMemo(() => {
@@ -496,7 +521,7 @@ export default function DailyShiftClient({
 
   const visitsRevenueToday = useMemo(() => {
     return initialVisits.reduce((sum, v) => {
-      if (v.status === 'Completed' || v.status === 'Delivered') {
+      if (v.status === 'Delivered') {
         return sum + ((Number(v.labor_cost) || 0) + (Number(v.total_amount) || 0))
       }
       return sum
@@ -897,11 +922,20 @@ export default function DailyShiftClient({
       `
 
     // Operations rows
-    const operationsRowsHtml = allOperations.slice(0, 50).map((op, idx) => `
+    const operationsRowsHtml = allOperations.slice(0, 50).map((op, idx) => {
+      const isVisitItem = op.kind === 'visit'
+      const isDebtItem = isVisitItem && (op.rawItem as DailyVisitItem)?.status === 'Completed'
+      const badgeClass = isDebtItem
+        ? 'badge-debt'
+        : op.kind === 'visit'
+        ? 'badge-visit'
+        : 'badge-insp'
+
+      return `
       <tr>
         <td style="text-align: center; width: 36px;">#${idx + 1}</td>
         <td>
-          <span class="badge ${op.kind === 'visit' ? 'badge-visit' : 'badge-insp'}">${op.kindLabel}</span>
+          <span class="badge ${badgeClass}">${op.kindLabel}</span>
         </td>
         <td>
           <strong>${op.vehicleOrSubject}</strong>
@@ -911,10 +945,11 @@ export default function DailyShiftClient({
         <td>🔧 ${op.technicianName}</td>
         <td style="text-align: center; font-size: 11px; color: #64748b;">${op.timeFormatted}</td>
         <td style="text-align: left; font-weight: bold; font-family: monospace;">
-          ${op.amount > 0 ? formatCurrency(op.amount) : '<span style="color:#f59e0b;font-size:11px;">بايتة</span>'}
+          ${op.amount > 0 ? formatCurrency(op.amount) : isDebtItem ? '<span style="color:#d97706;font-size:11px;font-weight:bold;">دين (غير مقبوض)</span>' : '<span style="color:#64748b;font-size:11px;">بايتة</span>'}
         </td>
       </tr>
-    `).join('')
+    `
+    }).join('')
 
     const htmlContent = `
 <!DOCTYPE html>
@@ -1051,6 +1086,7 @@ export default function DailyShiftClient({
       font-weight: bold;
     }
     .badge-visit { background: #ede9fe; color: #6d28d9; }
+    .badge-debt { background: #fef3c7; color: #b45309; }
     .badge-insp { background: #ccfbf1; color: #0f766e; }
     .badge-expense { background: #ffe4e6; color: #be123c; }
     .badge-wage { background: #fef3c7; color: #b45309; }
@@ -1637,7 +1673,7 @@ export default function DailyShiftClient({
               </div>
             </div>
             <div>
-              <p className="text-xs text-slate-400 font-medium">سيارات مسلّمة اليوم</p>
+              <p className="text-xs text-slate-400 font-medium">سيارات مسلّمة ومقبوضة اليوم</p>
               <p className="text-2xl sm:text-3xl font-extrabold text-sky-700 mt-1">
                 {deliveredVisitsCount} <span className="text-base font-normal text-slate-500">مسلّمة</span>
               </p>
@@ -1645,8 +1681,13 @@ export default function DailyShiftClient({
                 <p>
                   إيراد التسليم: <span className="font-semibold text-sky-800">{formatCurrency(visitsRevenueToday)}</span>
                 </p>
+                {debtVisitsCount > 0 && (
+                  <p className="text-amber-700 font-semibold">
+                    • {debtVisitsCount} سيارة ديون ({formatCurrency(debtVisitsTotalToday)})
+                  </p>
+                )}
                 {overnightVisitsCount > 0 && (
-                  <p className="text-amber-600 font-semibold">
+                  <p className="text-slate-500 font-medium">
                     • {overnightVisitsCount} سيارة بايتة قيد العمل
                   </p>
                 )}
@@ -2103,8 +2144,14 @@ export default function DailyShiftClient({
 
                         {/* Amount IQD */}
                         <td className="py-3.5 px-3 font-mono font-bold whitespace-nowrap">
-                          {isVisit && (op.rawItem as DailyVisitItem).status !== 'Completed' && (op.rawItem as DailyVisitItem).status !== 'Delivered' ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200">
+                          {isVisit && (op.rawItem as DailyVisitItem).status === 'Completed' ? (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold bg-amber-50 text-amber-900 border-2 border-amber-300 shadow-xs">
+                              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse shrink-0" />
+                              <span>دين: {formatCurrency((Number((op.rawItem as DailyVisitItem).labor_cost) || 0) + (Number((op.rawItem as DailyVisitItem).total_amount) || 0))}</span>
+                              <span className="text-[10px] text-amber-700 font-normal">(غير مقبوض)</span>
+                            </span>
+                          ) : isVisit && (op.rawItem as DailyVisitItem).status !== 'Delivered' ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
                               بايتة (تُحصّل عند التسليم)
                             </span>
                           ) : op.amount > 0 ? (

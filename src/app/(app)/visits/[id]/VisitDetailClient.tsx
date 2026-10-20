@@ -113,9 +113,7 @@ export default function VisitDetailClient({ visitId, role }: Props) {
       updatePayload.delivered_at = chosenDate
     } else if (status === 'Completed') {
       updatePayload.completed_at = chosenDate
-      if (!visit?.delivered_at) {
-        updatePayload.delivered_at = chosenDate
-      }
+      updatePayload.delivered_at = null
     } else {
       updatePayload.delivered_at = null
     }
@@ -532,17 +530,30 @@ export default function VisitDetailClient({ visitId, role }: Props) {
                   key={s}
                   onClick={() => handleStatusChange(s)}
                   disabled={isLocked}
-                  className={`w-full py-2.5 rounded-2xl text-sm font-semibold transition-all ${
+                  className={`w-full py-2.5 rounded-2xl text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
                     visit.status === s
                       ? 'text-white shadow-md'
+                      : s === 'Completed'
+                      ? 'bg-amber-50 text-amber-800 hover:text-amber-900 hover:bg-amber-100/90 border-2 border-amber-300 font-bold'
                       : 'bg-slate-50 text-slate-500 hover:text-slate-700 hover:bg-slate-100 border border-slate-100'
                   } ${isLocked ? 'cursor-not-allowed opacity-80' : ''}`}
                   style={visit.status === s ? {
-                    background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
-                    boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
+                    background: s === 'Completed'
+                      ? 'linear-gradient(135deg, #f59e0b, #d97706)'
+                      : s === 'Delivered'
+                      ? 'linear-gradient(135deg, #10b981, #059669)'
+                      : 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                    boxShadow: s === 'Completed'
+                      ? '0 4px 12px rgba(245,158,11,0.35)'
+                      : s === 'Delivered'
+                      ? '0 4px 12px rgba(16,185,129,0.35)'
+                      : '0 4px 12px rgba(124,58,237,0.35)',
                   } : {}}
                 >
-                  {VISIT_STATUS_LABELS[s]}
+                  {s === 'Completed' && (
+                    <span className={`w-2 h-2 rounded-full ${visit.status === s ? 'bg-white' : 'bg-amber-500'} animate-pulse`} />
+                  )}
+                  <span>{s === 'Completed' ? 'ديون (غير مسدد)' : VISIT_STATUS_LABELS[s]}</span>
                 </button>
               ))}
             </div>

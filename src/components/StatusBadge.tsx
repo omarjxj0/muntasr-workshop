@@ -8,10 +8,10 @@ interface StatusBadgeProps {
 
 // Light-background-friendly status colors
 const LIGHT_STATUS_COLORS: Record<VisitStatus, string> = {
-  'Pending':     'bg-amber-50 text-amber-700 border border-amber-200',
+  'Pending':     'bg-slate-100 text-slate-700 border border-slate-200',
   'In Progress': 'bg-violet-50 text-violet-700 border border-violet-200',
-  'Completed':   'bg-emerald-50 text-emerald-700 border border-emerald-200',
-  'Delivered':   'bg-slate-100 text-slate-600 border border-slate-200',
+  'Completed':   'bg-amber-50 text-amber-800 border-2 border-amber-300 shadow-xs font-bold',
+  'Delivered':   'bg-emerald-50 text-emerald-700 border border-emerald-200',
 }
 
 export default function StatusBadge({ status, className }: StatusBadgeProps) {
@@ -26,10 +26,10 @@ export default function StatusBadge({ status, className }: StatusBadgeProps) {
       <span
         className={cn(
           'w-1.5 h-1.5 rounded-full',
-          status === 'Pending'     && 'bg-amber-400 pulse-soft',
+          status === 'Pending'     && 'bg-slate-400',
           status === 'In Progress' && 'bg-violet-500 pulse-soft',
-          status === 'Completed'   && 'bg-emerald-500',
-          status === 'Delivered'   && 'bg-slate-400',
+          status === 'Completed'   && 'bg-amber-500 animate-pulse',
+          status === 'Delivered'   && 'bg-emerald-500',
         )}
       />
       {VISIT_STATUS_LABELS[status]}

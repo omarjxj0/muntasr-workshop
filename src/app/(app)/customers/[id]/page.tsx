@@ -153,9 +153,14 @@ export default async function CustomerProfilePage({ params }: Props) {
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <StatusBadge status={visit.status} />
-                  <p className="font-semibold text-sm text-emerald-600">
-                    {formatCurrency((visit.total_amount || 0) + (visit.labor_cost || 0))}
-                  </p>
+                  <div className="text-left">
+                    <p className={`font-semibold text-sm ${visit.status === 'Completed' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      {formatCurrency((visit.total_amount || 0) + (visit.labor_cost || 0))}
+                    </p>
+                    {visit.status === 'Completed' && (
+                      <span className="text-[10px] text-amber-700 font-semibold block text-left">دين غير مسدد</span>
+                    )}
+                  </div>
                 </div>
               </Link>
             ))}

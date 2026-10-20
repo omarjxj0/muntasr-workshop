@@ -33,11 +33,11 @@ export default async function VisitsPage({
 
   const { data: visits } = await query
 
-  const statuses: { label: string; value: string }[] = [
+  const statuses: { label: string; value: string; isDebt?: boolean }[] = [
     { label: 'الكل',          value: '' },
     { label: 'قيد الانتظار', value: 'Pending' },
     { label: 'قيد العمل',    value: 'In Progress' },
-    { label: 'مكتملة',        value: 'Completed' },
+    { label: 'ديون (غير مسدد)', value: 'Completed', isDebt: true },
     { label: 'تم التسليم',   value: 'Delivered' },
   ]
 
@@ -59,23 +59,31 @@ export default async function VisitsPage({
 
       {/* Status filter */}
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {statuses.map(s => (
-          <Link
-            key={s.value}
-            href={s.value ? `/visits?status=${s.value}` : '/visits'}
-            className={`px-4 py-2 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all ${
-              (sp.status ?? '') === s.value
-                ? 'text-white shadow-md'
-                : 'bg-white text-slate-500 hover:text-violet-600 border-2 border-slate-200 hover:border-violet-200'
-            }`}
-            style={(sp.status ?? '') === s.value ? {
-              background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
-              boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
-            } : {}}
-          >
-            {s.label}
-          </Link>
-        ))}
+        {statuses.map(s => {
+          const isSelected = (sp.status ?? '') === s.value
+          return (
+            <Link
+              key={s.value}
+              href={s.value ? `/visits?status=${s.value}` : '/visits'}
+              className={`px-4 py-2 rounded-2xl text-sm font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                isSelected
+                  ? s.isDebt
+                    ? 'bg-amber-600 text-white shadow-md shadow-amber-500/30'
+                    : 'text-white shadow-md'
+                  : s.isDebt
+                    ? 'bg-amber-50 text-amber-900 border-2 border-amber-300 hover:bg-amber-100 font-bold'
+                    : 'bg-white text-slate-500 hover:text-violet-600 border-2 border-slate-200 hover:border-violet-200'
+              }`}
+              style={isSelected && !s.isDebt ? {
+                background: 'linear-gradient(135deg, #7c3aed, #ec4899)',
+                boxShadow: '0 4px 12px rgba(124,58,237,0.3)',
+              } : {}}
+            >
+              {s.isDebt && <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />}
+              <span>{s.label}</span>
+            </Link>
+          )
+        })}
       </div>
 
       {/* Visits list */}
@@ -131,7 +139,14 @@ export default async function VisitsPage({
                 </div>
                 <div className="flex flex-col items-end gap-2 shrink-0">
                   <StatusBadge status={visit.status} />
-                  <p className="font-bold text-emerald-600">{formatCurrency(grandTotal)}</p>
+                  <div className="text-left">
+                    <p className={`font-bold ${visit.status === 'Completed' ? 'text-amber-600' : 'text-emerald-600'}`}>
+                      {formatCurrency(grandTotal)}
+                    </p>
+                    {visit.status === 'Completed' && (
+                      <span className="text-[10px] text-amber-700 font-semibold block text-left">دين غير مسدد</span>
+                    )}
+                  </div>
                 </div>
               </Link>
             )

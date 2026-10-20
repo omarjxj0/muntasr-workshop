@@ -67,15 +67,15 @@ export function formatDateOnly(dateStr: string): string {
 export const VISIT_STATUS_LABELS: Record<VisitStatus, string> = {
   'Pending':     'قيد الانتظار',
   'In Progress': 'قيد العمل',
-  'Completed':   'مكتملة',
+  'Completed':   'ديون',
   'Delivered':   'تم التسليم',
 }
 
 export const VISIT_STATUS_COLORS: Record<VisitStatus, string> = {
-  'Pending':     'text-amber-400 bg-amber-400/10 border-amber-400/30',
+  'Pending':     'text-slate-400 bg-slate-400/10 border-slate-400/30',
   'In Progress': 'text-blue-400 bg-blue-400/10 border-blue-400/30',
-  'Completed':   'text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
-  'Delivered':   'text-slate-400 bg-slate-400/10 border-slate-400/30',
+  'Completed':   'text-amber-500 bg-amber-500/10 border-amber-500/30',
+  'Delivered':   'text-emerald-400 bg-emerald-400/10 border-emerald-400/30',
 }
 
 export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {
