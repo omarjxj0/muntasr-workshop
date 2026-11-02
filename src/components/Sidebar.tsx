@@ -7,7 +7,7 @@ import { useState } from 'react'
 import {
   LayoutDashboard, Car, Package, Users, Wallet, Settings,
   LogOut, Menu, X, CalendarDays, UserCheck, MessageSquare, TrendingUp, Cpu, Stethoscope, Flame,
-  ShoppingBag
+  ShoppingBag, FileBarChart2
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import type { UserRole } from '@/lib/types'
@@ -42,6 +42,7 @@ const navItems: NavItem[] = [
   { href: '/employees/wages',   label: 'الرواتب اليومية',  icon: <CalendarDays size={20} />, adminOnly: true },
   { href: '/finances',          label: 'الصندوق',           icon: <Wallet size={20} />,      adminOnly: true },
   { href: '/expenses',          label: 'المصروفات',         icon: <TrendingUp size={20} className="rotate-180" />, adminOnly: true },
+  { href: '/monthly-report',    label: 'التقرير الشهري',    icon: <FileBarChart2 size={20} />,                   adminOnly: true },
   { href: '/settings',          label: 'الإعدادات',         icon: <Settings size={20} />,    adminOnly: true },
 ]
 
