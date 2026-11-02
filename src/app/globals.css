@@ -148,16 +148,15 @@ body {
 
 /* ── Print Styles ─────────────────────────────────────────── */
 @media print {
+  /* Default: hide everything */
   body * {
     visibility: hidden;
   }
 
-  #thermal-receipt, #thermal-receipt *,
-  #daily-shift-report, #daily-shift-report * {
+  /* ── Thermal receipt (half-A4 / A5) ── */
+  #thermal-receipt, #thermal-receipt * {
     visibility: visible;
   }
-
-  /* Half A4 = A5 portrait (148mm × 210mm) */
   #thermal-receipt {
     position: absolute;
     left: 50%;
@@ -169,6 +168,10 @@ body {
     box-sizing: border-box;
   }
 
+  /* ── Daily-shift report popup ── */
+  #daily-shift-report, #daily-shift-report * {
+    visibility: visible;
+  }
   #daily-shift-report {
     position: absolute;
     left: 0;
@@ -182,8 +185,37 @@ body {
     color: #000000;
   }
 
+  /* ── Monthly executive report ── */
+  #monthly-report-printable, #monthly-report-printable * {
+    visibility: visible;
+  }
+  #monthly-report-printable {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: auto !important;
+    overflow: visible !important;
+    margin: 0;
+    padding: 10mm 12mm;
+    box-sizing: border-box;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  /* Hide sidebar, header chrome and action buttons inside the report */
+  aside, nav, header, .no-print {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Avoid breaking inside cards and table rows */
+  .report-card, tr, thead {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
   @page {
-    size: auto;
-    margin: 8mm;
+    size: A4;
+    margin: 10mm 12mm;
   }
 }
