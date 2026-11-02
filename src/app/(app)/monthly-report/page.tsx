@@ -22,51 +22,56 @@ export default async function MonthlyReportPage() {
 
   if (profile?.role !== 'admin') redirect('/')
 
-  // Fetch all data — client filters by selected month in Baghdad timezone
+  // Fetch all data for client-side Baghdad timezone month filtering
   const [visitsRes, inspectionsRes, salesRes, expensesRes, wagesRes] = await Promise.all([
     supabase
       .from('visits')
       .select('id, total_amount, labor_cost, technician_name, delivered_at, status, vehicles(make_and_model)')
       .eq('status', 'Delivered')
       .not('delivered_at', 'is', null)
-      .order('delivered_at', { ascending: false }),
+      .order('delivered_at', { ascending: false })
+      .limit(5000),
 
     supabase
       .from('quick_inspections')
       .select('id, inspection_fee, cost, technician_name, created_at, subject, car_info')
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+      .limit(5000),
 
     supabase
       .from('direct_sales')
       .select('id, selling_price, technician_name, created_at, item_name, item_type, ecu_id')
-      .order('created_at', { ascending: false }),
+      .order('created_at', { ascending: false })
+      .limit(5000),
 
-    // Operational expenses from expenses table (includes 'سلفة / أجور' entries)
+    // All expenses with full columns (description, category, amount, created_at, and any notes/worker fields)
     supabase
       .from('expenses')
-      .select('id, amount, category, description, created_at')
-      .order('created_at', { ascending: false }),
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(5000),
 
-    // Daily wages from daily_wages table (the primary source for worker pay)
+    // Daily wages from daily_wages table with employee details
     supabase
       .from('daily_wages')
       .select(`
         id, amount, date, employee_id,
-        employees ( name )
+        employees ( id, name, specialization, phone )
       `)
-      .order('date', { ascending: false }),
+      .order('date', { ascending: false })
+      .limit(5000),
   ])
 
-  // Normalize wages into a unified shape for the client
+  // Normalize wages into a unified structure
   const normalizedWages = (wagesRes.data ?? []).map((w: any) => ({
     id: w.id,
     amount: Math.round(Number(w.amount) || 0),
-    // Use `date` field (YYYY-MM-DD) as the timestamp for Baghdad-tz month filtering
+    // `date` field (YYYY-MM-DD) for Baghdad-tz month matching
     created_at: w.date,
     category: 'أجور ورواتب',
     description: `أجر يومي - ${w.employees?.name || 'فني / موظف'}`,
     recipientName: w.employees?.name ?? null,
-    isWage: true,
+    isWage: true as const,
   }))
 
   return (
